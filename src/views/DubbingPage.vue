@@ -60,43 +60,59 @@
   </div>
 </template>
 
-<script setup>
+<script>
+import { defineComponent } from 'vue';
 import { ref, reactive } from 'vue';
 
-const textContent = ref('');
-const audioUrl = ref('');
+export default defineComponent({
+  name: 'DubbingPage',
+  setup() {
+    const textContent = ref('');
+    const audioUrl = ref('');
 
-const dubbingOptions = reactive({
-  voiceType: 'female',
-  speed: 1,
-  pitch: 1
+    const dubbingOptions = reactive({
+      voiceType: 'female',
+      speed: 1,
+      pitch: 1
+    });
+
+    const formatSpeed = (val) => {
+      return `${val}x`;
+    };
+
+    const formatPitch = (val) => {
+      return `${val}x`;
+    };
+
+    const generateDubbing = () => {
+      if (textContent.value.trim() === '') {
+        alert('请输入需要配音的文字内容');
+        return;
+      }
+      // 这里可以调用API接口生成配音（示例留空）
+      audioUrl.value = 'https://example.com/sample-audio.mp3';
+    };
+
+    const downloadAudio = () => {
+      if (audioUrl.value) {
+        const link = document.createElement('a');
+        link.href = audioUrl.value;
+        link.download = '配音结果.mp3';
+        link.click();
+      }
+    };
+
+    return {
+      textContent,
+      audioUrl,
+      dubbingOptions,
+      formatSpeed,
+      formatPitch,
+      generateDubbing,
+      downloadAudio
+    };
+  }
 });
-
-const formatSpeed = (val) => {
-  return `${val}x`;
-};
-
-const formatPitch = (val) => {
-  return `${val}x`;
-};
-
-const generateDubbing = () => {
-  if (textContent.value.trim() === '') {
-    alert('请输入需要配音的文字内容');
-    return;
-  }
-  // 这里可以调用API接口生成配音（示例留空）
-  audioUrl.value = 'https://example.com/sample-audio.mp3';
-};
-
-const downloadAudio = () => {
-  if (audioUrl.value) {
-    const link = document.createElement('a');
-    link.href = audioUrl.value;
-    link.download = '配音结果.mp3';
-    link.click();
-  }
-};
 </script>
 
 <style scoped>

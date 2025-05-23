@@ -1,21 +1,53 @@
 <template>
   <div>
     <h2>翻译对比</h2>
-    <p>双语阅读，对照理解</p>
+    <p>对比不同翻译版本，找出最佳表达</p>
 
     <!-- 原文输入 -->
     <el-input
-      v-model="sourceText"
+      v-model="originalText"
       type="textarea"
-      :rows="6"
-      placeholder="请输入需要翻译的文本..."
+      :rows="4"
+      placeholder="请输入需要翻译的原文..."
     ></el-input>
+
+    <!-- 翻译结果对比 -->
+    <div class="translation-comparison" style="margin-top: 20px;">
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-card class="box-card">
+            <template #header>
+              <div class="card-header">
+                <span>翻译版本 1</span>
+                <el-button type="primary" @click="copyTranslation(translation1)">复制</el-button>
+              </div>
+            </template>
+            <div class="text item">
+              {{ translation1 }}
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="12">
+          <el-card class="box-card">
+            <template #header>
+              <div class="card-header">
+                <span>翻译版本 2</span>
+                <el-button type="primary" @click="copyTranslation(translation2)">复制</el-button>
+              </div>
+            </template>
+            <div class="text item">
+              {{ translation2 }}
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
 
     <!-- 翻译选项 -->
     <div class="translation-options" style="margin-top: 20px;">
       <el-form :model="translationOptions" label-width="100px">
         <el-form-item label="目标语言">
-          <el-select v-model="translationOptions.targetLang" placeholder="请选择目标语言">
+          <el-select v-model="translationOptions.targetLanguage" placeholder="请选择目标语言">
             <el-option label="英语" value="en" />
             <el-option label="日语" value="ja" />
             <el-option label="韩语" value="ko" />
@@ -25,74 +57,65 @@
         </el-form-item>
         <el-form-item label="翻译风格">
           <el-select v-model="translationOptions.style" placeholder="请选择翻译风格">
-            <el-option label="直译" value="literal" />
-            <el-option label="意译" value="free" />
-            <el-option label="学术" value="academic" />
+            <el-option label="正式" value="formal" />
+            <el-option label="口语" value="casual" />
             <el-option label="文学" value="literary" />
+            <el-option label="技术" value="technical" />
           </el-select>
         </el-form-item>
       </el-form>
     </div>
 
-    <el-button type="primary" @click="translateText" style="margin-top: 20px;">
-      开始翻译
+    <el-button type="primary" @click="compareTranslations" style="margin-top: 20px;">
+      开始对比
     </el-button>
-
-    <!-- 翻译结果 -->
-    <div v-if="translationResult" style="margin-top: 20px;">
-      <h3>翻译结果：</h3>
-      <el-card class="box-card">
-        <div class="translation-comparison">
-          <div class="source-text">
-            <h4>原文</h4>
-            <p>{{ sourceText }}</p>
-          </div>
-          <div class="target-text">
-            <h4>译文</h4>
-            <p>{{ translationResult }}</p>
-          </div>
-        </div>
-        <div style="margin-top: 10px;">
-          <el-button type="success" @click="copyTranslation">复制译文</el-button>
-          <el-button type="primary" @click="saveTranslation">保存对比</el-button>
-        </div>
-      </el-card>
-    </div>
   </div>
 </template>
 
-<script setup>
+<script>
+import { defineComponent } from 'vue';
 import { ref, reactive } from 'vue';
 
-const sourceText = ref('');
-const translationResult = ref('');
+export default defineComponent({
+  name: 'TranslationComparison',
+  setup() {
+    const originalText = ref('');
+    const translation1 = ref('');
+    const translation2 = ref('');
 
-const translationOptions = reactive({
-  targetLang: 'en',
-  style: 'literal'
+    const translationOptions = reactive({
+      targetLanguage: 'en',
+      style: 'formal'
+    });
+
+    const compareTranslations = () => {
+      if (originalText.value.trim() === '') {
+        alert('请输入需要翻译的原文');
+        return;
+      }
+      // 这里可以调用API接口进行翻译（示例留空）
+      translation1.value = 'This is the first translation version.';
+      translation2.value = 'This is the second translation version.';
+    };
+
+    const copyTranslation = (text) => {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('复制成功！');
+      }).catch(() => {
+        alert('复制失败，请手动复制。');
+      });
+    };
+
+    return {
+      originalText,
+      translation1,
+      translation2,
+      translationOptions,
+      compareTranslations,
+      copyTranslation
+    };
+  }
 });
-
-const translateText = () => {
-  if (sourceText.value.trim() === '') {
-    alert('请输入需要翻译的文本');
-    return;
-  }
-  // 这里可以调用API接口进行翻译（示例留空）
-  translationResult.value = 'This is the translated text (example).';
-};
-
-const copyTranslation = () => {
-  if (translationResult.value) {
-    navigator.clipboard.writeText(translationResult.value)
-      .then(() => alert('译文已复制到剪贴板'))
-      .catch(err => console.error('复制失败:', err));
-  }
-};
-
-const saveTranslation = () => {
-  // 这里可以实现保存翻译对比的功能
-  alert('保存功能开发中...');
-};
 </script>
 
 <style scoped>
@@ -103,23 +126,22 @@ p {
   color: #606266;
   margin-top: 5px;
 }
-.translation-options {
-  max-width: 600px;
-  margin: 0 auto;
-}
 .translation-comparison {
+  margin-bottom: 20px;
+}
+.card-header {
   display: flex;
-  gap: 20px;
+  justify-content: space-between;
+  align-items: center;
 }
-.source-text, .target-text {
-  flex: 1;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+.text {
+  font-size: 14px;
 }
-h4 {
-  margin-top: 0;
-  color: #409EFF;
+.item {
+  margin-bottom: 18px;
 }
 .box-card {
+  width: 100%;
+}
+</style>
  

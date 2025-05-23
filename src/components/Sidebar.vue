@@ -59,7 +59,6 @@
 <script setup>
 import { useConversationStore } from '@/store/conversation';
 import { Plus } from '@element-plus/icons-vue';
-import { defineComponent } from 'vue';
 
 const conversationStore = useConversationStore();
 

@@ -2,7 +2,7 @@
   <el-container style="height: 100vh">
     <!-- 侧边栏 -->
     <el-aside width="240px" style="background: #f5f7fa">
-      <Sidebar />
+      <SideBar />
     </el-aside>
 
     <!-- 主体区域（含头部和内容） -->
@@ -21,12 +21,12 @@
 
 <script>
 import { defineComponent } from 'vue';
-import Sidebar from '@/components/Sidebar.vue';
+import SideBar from '@/components/SideBar.vue';
 import TopBar from '@/components/TopBar.vue';
 
 export default defineComponent({
   name: 'App',
-  components: { Sidebar, TopBar }
+  components: { SideBar, TopBar }
 });
 </script>
 
