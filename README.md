@@ -1,24 +1,26 @@
-# assistant
+# 项目结构
 
-## Project setup
-```
-npm install
-```
-
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
-
-### Compiles and minifies for production
-```
-npm run build
-```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+- src/: 源码目录
+    - main.js：项目入口，初始化 Vue、Element Plus、Vue Router、Pinia 等
+    - App.vue：顶层组件，包含侧边栏、头部和主内容区布局
+    - router/
+        - index.js：路由配置，定义各功能模块对应的页面路由
+    - store/ (Pinia)
+        - user.js：用户信息状态管理
+        - conversation.js：会话历史状态管理
+    - components/：复用组件
+        - Sidebar.vue：左侧导航栏组件（包含功能菜单和历史对话）
+        - TopBar.vue：顶部用户信息组件
+        - SearchBar.vue：智能搜索页面的搜索输入组件
+        - ModuleCard.vue：展示功能模块入口的卡片组件（可选）
+    - views/：页面级组件，每个功能模块一个视图文件
+        - IntelligentSearch.vue：智能搜索页面
+        - AIWriting.vue：AI 写作页面
+        - ReportGeneration.vue：报告生成页面
+        - PolicyQA.vue：政策问答页面
+        - LiteratureReview.vue：文献研读页面
+        - Dubbing.vue：智能配音页面
+        - PPTGeneration.vue：PPT 生成页面
+        - TranslationComparison.vue：翻译对比页面
+        - SummaryReport.vue：总结汇报页面
+    - assets/：静态资源，如 Logo、头像等图片
