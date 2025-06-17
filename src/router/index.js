@@ -1,25 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import IntelligentSearch from '@/views/IntelligentSearch.vue'
-import AIWriting from '@/views/AIWriting.vue'
 import ReportGeneration from '@/views/ReportGeneration.vue'
-import PolicyQA from '@/views/PolicyQA.vue'
-import LiteratureReview from '@/views/LiteratureReview.vue'
-import DubbingPage from '@/views/DubbingPage.vue'
-import PPTGeneration from '@/views/PPTGeneration.vue'
-import TranslationComparison from '@/views/TranslationComparison.vue'
-import SummaryReport from '@/views/SummaryReport.vue'
+import KnowledgeQA from '@/views/KnowledgeQA.vue'
+import OCRRecognition from '@/views/OCRRecognition.vue'
+import DocumentSummary from '@/views/DocumentSummary.vue'
+import MindMap from '@/views/MindMap.vue'
 
 const routes = [
   { path: '/', redirect: '/search' },
   { path: '/search', name: '智能搜索', component: IntelligentSearch },
-  { path: '/writing', name: 'AI写作', component: AIWriting },
   { path: '/report', name: '报告生成', component: ReportGeneration },
-  { path: '/policy', name: '政策问答', component: PolicyQA },
-  { path: '/literature', name: '文献研读', component: LiteratureReview },
-  { path: '/dubbing', name: '智能配音', component: DubbingPage },
-  { path: '/ppt', name: 'PPT生成', component: PPTGeneration },
-  { path: '/translation', name: '翻译对比', component: TranslationComparison },
-  { path: '/summary', name: '总结汇报', component: SummaryReport },
+  { path: '/knowledge-qa', name: '知识库问答', component: KnowledgeQA },
+  { path: '/ocr', name: 'OCR识别', component: OCRRecognition },
+  { path: '/document-summary', name: '文档摘要', component: DocumentSummary },
+  { path: '/mind-map', name: '思维导图', component: MindMap },
 ]
 
 const router = createRouter({

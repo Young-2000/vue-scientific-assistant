@@ -22,14 +22,11 @@
       active-text-color="#409EFF"
     >
       <el-menu-item index="/search">智能搜索</el-menu-item>
-      <el-menu-item index="/writing">AI写作</el-menu-item>
       <el-menu-item index="/report">报告生成</el-menu-item>
-      <el-menu-item index="/policy">政策问答</el-menu-item>
-      <el-menu-item index="/literature">文献研读</el-menu-item>
-      <el-menu-item index="/dubbing">智能配音</el-menu-item>
-      <el-menu-item index="/ppt">PPT生成</el-menu-item>
-      <el-menu-item index="/translation">翻译对比</el-menu-item>
-      <el-menu-item index="/summary">总结汇报</el-menu-item>
+      <el-menu-item index="/knowledge-qa">知识库问答</el-menu-item>
+      <el-menu-item index="/ocr">OCR识别</el-menu-item>
+      <el-menu-item index="/document-summary">文档摘要</el-menu-item>
+      <el-menu-item index="/mind-map">思维导图</el-menu-item>
     </el-menu>
 
     <!-- 历史对话 -->
