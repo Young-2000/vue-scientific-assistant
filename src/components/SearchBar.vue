@@ -39,12 +39,19 @@
 <script setup>
 import { ref } from 'vue';
 import { ArrowUp, Connection, Collection, Lock, User } from '@element-plus/icons-vue';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const query = ref('');
 
 const onSearch = () => {
-  // 搜索按钮逻辑（调用 API 或处理查询）
-  console.log('搜索内容：', query.value);
+  if (query.value.trim()) {
+    // 将查询内容作为参数传递到聊天界面
+    router.push({
+      path: '/chat',
+      query: { initialMessage: query.value }
+    });
+  }
 };
 </script>
 

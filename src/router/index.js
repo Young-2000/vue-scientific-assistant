@@ -5,6 +5,7 @@ import KnowledgeQA from '@/views/KnowledgeQA.vue'
 import OCRRecognition from '@/views/OCRRecognition.vue'
 import DocumentSummary from '@/views/DocumentSummary.vue'
 import MindMap from '@/views/MindMap.vue'
+import ChatInterface from '../components/ChatInterface.vue'
 
 const routes = [
   { path: '/', redirect: '/search' },
@@ -14,10 +15,16 @@ const routes = [
   { path: '/ocr', name: 'OCR识别', component: OCRRecognition },
   { path: '/document-summary', name: '文档摘要', component: DocumentSummary },
   { path: '/mind-map', name: '思维导图', component: MindMap },
+  {
+    path: '/chat',
+    name: 'chat',
+    component: ChatInterface,
+    props: true
+  }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/'),
   routes
 })
 
