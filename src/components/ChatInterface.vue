@@ -62,7 +62,7 @@ const authToken = ref('');
 const headers = ref({});
 const kb_ids = ref([]);
 // const kb_id = ref([]);
-const user_id = ref('');
+const user_id = ref([]);
 const controller = ref(null); // 定义controller
 const latestAiMessage = ref(null); // 定义latestAiMessage
 const conversation_id = ref('');
@@ -91,8 +91,8 @@ const login = async () => {
     const loginData = {
       email: '123@123.com',
       // password: '123'
-      password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
-    };
+      password: "FN6pAfTq1saZeM+LtMwzA1Ao9fIQRct9OcVeJjhWul6Y+ki/Uzb4X6tvI1T591CFP2HmK6M4ZYbpT1OZM3rv9tvAE4c7S9nnXZ+ffg6w2Rq9OgOLCCbk5T7rapP6UxWD14aM62zbo1WtzSRKlC87Ik17U9UzPFlXbvdIEAzQr06GgRADmpvw3Msk05CvZTy9/f26q5TxlQOREFhZglTFTirosHdg09wnnA+f6CkZgm7Vvza+0ZJcRONmXUN8NFkY0rYxBJhaLUJQclFcGVjplVPbCQeSOafXI1yv3JN2NoV1e1s2A3LNdg0jxh6oEQ0TrveMyQfhytxNQqAGoT8lgg=="
+      };
 
     console.log('开始登录...');
     const response = await fetch('http://127.0.0.1/v1/user/login', {
@@ -180,7 +180,7 @@ const login = async () => {
 const createDialog = async (kb_ids_param) => {
   try {
     // 如果传入的是数组，取第一个元素作为 kb_id
-    const kb_id = Array.isArray(kb_ids_param) ? kb_ids_param[0] : kb_ids_param;
+    const kb_id = Array.isArray(kb_ids_param) ? kb_ids_param[1] : kb_ids_param;
     console.log('原始 kb_ids_param:', kb_ids_param);
     console.log('使用的 kb_id:', kb_id);
     
@@ -189,7 +189,7 @@ const createDialog = async (kb_ids_param) => {
       "name": "test",
       "icon": "",
       "language": "English",
-      "kb_id": kb_id,
+      "kb_ids": [kb_id],
       "llm_id": "deepseek-r1:7b@Ollama",
       "llm_setting": {
         "temperature": 0.1,
