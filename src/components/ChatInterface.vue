@@ -180,7 +180,7 @@ const login = async () => {
 const createDialog = async (kb_ids_param) => {
   try {
     // 如果传入的是数组，取第一个元素作为 kb_id
-    const kb_id = Array.isArray(kb_ids_param) ? kb_ids_param[1] : kb_ids_param;
+    const kb_id = Array.isArray(kb_ids_param) ? kb_ids_param[0] : kb_ids_param;
     console.log('原始 kb_ids_param:', kb_ids_param);
     console.log('使用的 kb_id:', kb_id);
     
