@@ -242,16 +242,16 @@ if __name__ == "__main__":
         question = "多模态大模型是什么"
 
         # 完整对话流式流程
-        dialog_id = create_dialog(kb_ids)
-        conversation_id = create_conversation(dialog_id)
+        # dialog_id = create_dialog(kb_ids)
+        # conversation_id = create_conversation(dialog_id)
 
-        while True:
-            question = input("请输入你的问题（输入 q 退出）：")
-            if question.lower() == "q":
-                break
-            send_completion_stream(conversation_id, question)
+        # while True:
+        #     question = input("请输入你的问题（输入 q 退出）：")
+        #     if question.lower() == "q":
+        #         break
+        #     send_completion_stream(conversation_id, question)
 
         # 可选额外接口
-        # retrieval_test(question, kb_ids)
-        # related_questions(question)
-        # send_ask_stream(question, kb_ids)  # 流式接口（可选）
+        retrieval_test(question, kb_ids)
+        related_questions(question)
+        send_ask_stream(question, kb_ids)  # 流式接口（可选）

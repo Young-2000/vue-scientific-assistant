@@ -7,20 +7,29 @@
   >
     <div class="popup-arrow"></div>
     <div class="popup-content">
-      <div 
-        v-for="(reference, index) in props.references" 
-        :key="index" 
-        class="reference-item"
-      >
-        <div class="reference-text" v-if="reference.content">
-          {{ reference.content }}
+      <template v-if="(props.references && props.references.length > 0) || (files && files.length > 0)">
+        <div v-if="props.references && props.references.length > 0">
+          <div 
+            v-for="(reference, index) in props.references" 
+            :key="index" 
+            class="reference-item"
+          >
+            <div class="reference-text" v-if="reference.content" v-html="processHighlight(reference.content)">
+            </div>
+            
+            <!-- 直接显示文档信息 -->
+            <div v-if="reference.document_name" class="document-info">
+              <div class="document-name">
+                <el-icon><Document /></el-icon>
+                <span>{{ reference.document_name }}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        <!-- 文件展示组件 -->
-        <FileDisplay 
-          v-if="reference.content && getFilesForReference(reference).length > 0"
-          :files="getFilesForReference(reference)"
-        />
+        <FileDisplay v-if="files && files.length > 0" :files="files" />
+      </template>
+      <div v-else class="no-references">
+        <p>暂无引用内容</p>
       </div>
     </div>
   </div>
@@ -28,6 +37,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Document } from '@element-plus/icons-vue';
 import FileDisplay from './FileDisplay.vue';
 
 // 定义组件属性
@@ -67,6 +77,14 @@ const popupStyle = computed(() => {
   };
 });
 
+// 处理高亮文本
+const processHighlight = (content) => {
+  if (!content) return '';
+  
+  // 将 <em> 标签替换为 highlight-text 样式
+  return content.replace(/<em>(.*?)<\/em>/g, '<span class="highlight-text">$1</span>');
+};
+
 // 滚动事件处理函数
 const handleScroll = () => {
   // 当滚动时直接关闭弹窗，避免位置计算问题
@@ -88,29 +106,12 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
 });
-
-// 根据引用内容匹配对应的文件
-const getFilesForReference = (reference) => {
-  console.log('getFilesForReference called with:', reference);
-  console.log('Available files:', props.files);
-  
-  if (!reference.document_id || !props.files || props.files.length === 0) {
-    console.log('No document_id or no files available');
-    return [];
-  }
-  
-  // 根据document_id匹配对应的文件
-  const matchedFiles = props.files.filter(file => file.doc_id === reference.document_id);
-  console.log('Matched files:', matchedFiles);
-  
-  return matchedFiles;
-};
 </script>
 
 <style scoped>
 .reference-popup {
   position: fixed;
-  z-index: 9999;
+  z-index: 99999;
   max-width: 600px;
   min-width: 400px;
   background: white;
@@ -171,6 +172,12 @@ const getFilesForReference = (reference) => {
   white-space: pre-wrap;
 }
 
+/* 高亮文本样式 */
+.reference-text :deep(.highlight-text) {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
 /* 文件展示组件在引用中的样式 */
 .reference-item :deep(.file-display) {
   margin-top: 8px;
@@ -188,5 +195,37 @@ const getFilesForReference = (reference) => {
   padding: 4px 8px;
   font-size: 12px;
   max-width: 150px;
+}
+
+/* 文档信息样式 */
+.document-info {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #f0f7ff;
+  border-radius: 4px;
+  border: 1px solid #d1e7ff;
+}
+
+.document-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #409EFF;
+}
+
+.document-name .el-icon {
+  font-size: 14px;
+}
+
+.no-references {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+}
+
+.no-references p {
+  margin: 0;
+  font-size: 14px;
 }
 </style> 
