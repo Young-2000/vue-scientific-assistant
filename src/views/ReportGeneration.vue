@@ -1,295 +1,494 @@
 <template>
-  <div class="report-generation-view">
-    <h2 class="main-title">报告生成</h2>
-    <p class="subtitle">基于预设模板快速填充内容，一键生成报告，并支持导出PDF/Word格式</p>
-
-    <!-- 模板选择区域 -->
-    <div class="template-selection">
-      <h3>选择报告模板</h3>
-      <el-radio-group v-model="selectedTemplate" size="large">
-        <el-radio-button v-for="template in templates" :key="template.id" :label="template.id">
-          {{ template.name }}
-        </el-radio-button>
-      </el-radio-group>
+  <div class="report-generation-simple-bg">
+    <div class="simple-header">
+      <h2 class="main-title">报告生成</h2>
+      <div class="subtitle">一键生成专业报告，支持自定义模板</div>
     </div>
-
-    <!-- 内容填充区域 -->
-    <div class="content-area">
-      <h3>填充内容</h3>
-      <div v-if="selectedTemplate">
-        <div v-for="(field, index) in currentTemplate.fields" :key="index" class="field-item">
-          <h4>{{ field.label }}</h4>
-          <el-input 
-            v-if="field.type === 'text'" 
-            v-model="fieldValues[field.name]" 
-            :placeholder="field.placeholder"
-          />
-          <el-input 
-            v-else-if="field.type === 'textarea'" 
-            v-model="fieldValues[field.name]" 
-            :placeholder="field.placeholder"
-            type="textarea"
-            :rows="4"
-          />
-          <el-upload
-            v-else-if="field.type === 'file'"
-            class="upload-demo"
-            action="#"
-            :auto-upload="false"
-            :on-change="handleFileChange"
+    <el-row justify="center">
+      <el-col :xs="24" :sm="22" :md="22" :lg="20" :xl="18" style="max-width: 1100px;">
+        <el-card class="gen-card">
+          <el-form
+            ref="formRef"
+            :model="form"
+            :rules="rules"
+            @submit.prevent="handleSubmit"
+            class="form-section"
+            label-width="100px"
+            label-position="top"
           >
-            <el-button type="primary">选择文件</el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                {{ field.placeholder }}
+            <el-form-item label="指令 instruction">
+              <el-input v-model="form.instruction" clearable />
+              <template #description>
+                <div class="form-tip">指令为可选项，可用于指定报告风格、语言等。</div>
+              </template>
+            </el-form-item>
+            <el-form-item label="主题 topic" prop="topic" required>
+              <el-input v-model="form.topic" clearable />
+              <template #description>
+                <div class="form-tip">主题为必填项，请输入报告的主题。</div>
+              </template>
+            </el-form-item>
+            <el-form-item label="模板 template" prop="template" required>
+              <el-upload
+                class="upload-demo"
+                :show-file-list="false"
+                :auto-upload="false"
+                :before-upload="() => false"
+                accept=".txt,.docx"
+                @change="handleFileChange"
+              >
+                <el-button type="primary">
+                  <el-icon><UploadFilled /></el-icon>
+                  选择文件
+                </el-button>
+                <span v-if="fileName" class="file-name"><el-icon><Document /></el-icon> 已上传: {{ fileName }}</span>
+              </el-upload>
+              <template #description>
+                <div class="form-tip">模板为必填项，仅支持 txt 或 docx 文件。</div>
+              </template>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" native-type="submit" :loading="loading" style="width: 100%;">
+                <el-icon><MagicStick /></el-icon>
+                生成报告
+              </el-button>
+            </el-form-item>
+          </el-form>
+          <div v-if="loading" class="loading-section">
+            <div class="loading-card">
+              <div class="loading-content">
+                <div class="loading-spinner">
+                  <div class="spinner-ring"></div>
+                  <div class="spinner-ring"></div>
+                  <div class="spinner-ring"></div>
+                </div>
+                <h3>正在生成报告</h3>
+                <p>AI正在为您分析内容并生成专业报告...</p>
+                <el-progress :percentage="progress" class="mb-2" style="margin: 24px 0 0 0;" v-if="progress > 0 && progress < 100" />
+                <div class="loading-dots">
+                  <span></span><span></span><span></span>
+                </div>
               </div>
-            </template>
-          </el-upload>
-        </div>
-
-        <!-- AI辅助填充按钮 -->
-        <div class="ai-assist">
-          <el-button type="success" @click="aiAssistFill">
-            <el-icon><Magic /></el-icon>
-            AI辅助填充
-          </el-button>
-          <p class="tip">点击使用AI智能填充内容</p>
-        </div>
-      </div>
-      <div v-else class="no-template">
-        请先选择一个报告模板
-      </div>
-    </div>
-
-    <!-- 预览和导出区域 -->
-    <div class="action-area">
-      <el-button type="primary" @click="previewReport" :disabled="!selectedTemplate">预览报告</el-button>
-      <el-dropdown @command="handleExport">
-        <el-button type="success" :disabled="!selectedTemplate">
-          导出报告
-          <el-icon class="el-icon--right"><arrow-down /></el-icon>
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="pdf">导出为PDF</el-dropdown-item>
-            <el-dropdown-item command="word">导出为Word</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-    </div>
-
-    <!-- 报告预览对话框 -->
-    <el-dialog v-model="previewVisible" title="报告预览" width="70%">
-      <div class="report-preview">
-        <h1>{{ currentTemplate?.name }}</h1>
-        <div v-for="(field, index) in currentTemplate?.fields" :key="index" class="preview-field">
-          <h3>{{ field.label }}</h3>
-          <p>{{ fieldValues[field.name] || '未填写' }}</p>
-        </div>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="previewVisible = false">关闭</el-button>
-          <el-button type="primary" @click="handleExport('pdf')">导出PDF</el-button>
-          <el-button type="success" @click="handleExport('word')">导出Word</el-button>
-        </span>
-      </template>
-    </el-dialog>
+            </div>
+          </div>
+          <el-alert v-if="error" :title="error" type="error" show-icon class="mt-2" />
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { ArrowDown, Magic } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ref } from 'vue'
+import mammoth from 'mammoth'
+import { useRouter } from 'vue-router'
+import { Document, UploadFilled, MagicStick } from '@element-plus/icons-vue'
 
-// 模板数据
-const templates = [
-  { 
-    id: 'research-report', 
-    name: '科研报告', 
-    fields: [
-      { name: 'title', label: '报告标题', type: 'text', placeholder: '请输入报告标题' },
-      { name: 'abstract', label: '摘要', type: 'textarea', placeholder: '请输入报告摘要' },
-      { name: 'introduction', label: '引言', type: 'textarea', placeholder: '请输入引言内容' },
-      { name: 'methodology', label: '研究方法', type: 'textarea', placeholder: '请描述研究方法' },
-      { name: 'results', label: '研究结果', type: 'textarea', placeholder: '请描述研究结果' },
-      { name: 'conclusion', label: '结论', type: 'textarea', placeholder: '请输入结论' },
-      { name: 'references', label: '参考文献', type: 'textarea', placeholder: '请输入参考文献' }
-    ]
-  },
-  { 
-    id: 'project-proposal', 
-    name: '项目提案', 
-    fields: [
-      { name: 'title', label: '项目名称', type: 'text', placeholder: '请输入项目名称' },
-      { name: 'summary', label: '项目概述', type: 'textarea', placeholder: '请概述项目内容' },
-      { name: 'objectives', label: '项目目标', type: 'textarea', placeholder: '请描述项目目标' },
-      { name: 'methodology', label: '实施方法', type: 'textarea', placeholder: '请描述实施方法' },
-      { name: 'timeline', label: '时间线', type: 'textarea', placeholder: '请提供项目时间线' },
-      { name: 'budget', label: '预算', type: 'textarea', placeholder: '请提供项目预算' },
-      { name: 'team', label: '团队成员', type: 'textarea', placeholder: '请列出团队成员' }
-    ]
-  },
-  { 
-    id: 'experiment-report', 
-    name: '实验报告', 
-    fields: [
-      { name: 'title', label: '实验标题', type: 'text', placeholder: '请输入实验标题' },
-      { name: 'objective', label: '实验目的', type: 'textarea', placeholder: '请描述实验目的' },
-      { name: 'equipment', label: '实验设备', type: 'textarea', placeholder: '请列出实验设备' },
-      { name: 'procedure', label: '实验步骤', type: 'textarea', placeholder: '请描述实验步骤' },
-      { name: 'data', label: '实验数据', type: 'textarea', placeholder: '请输入实验数据' },
-      { name: 'analysis', label: '数据分析', type: 'textarea', placeholder: '请分析实验数据' },
-      { name: 'conclusion', label: '实验结论', type: 'textarea', placeholder: '请输入实验结论' }
-    ]
+const form = ref({
+  instruction: '',
+  topic: '',
+  template: ''
+})
+const fileName = ref('')
+const authToken = ref('')
+
+const loading = ref(false)
+const error = ref('')
+const progress = ref(0)
+const formRef = ref()
+
+const rules = {
+  topic: [
+    { required: true, message: '请输入报告主题', trigger: 'blur' }
+  ],
+  template: [
+    { required: true, message: '请上传模板文件', trigger: 'change' }
+  ]
+}
+
+const router = useRouter()
+
+async function login() {
+  const loginData = {
+    email: '123@123.com',
+    password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
+  };
+  const resp = await fetch('http://127.0.0.1/v1/user/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginData)
+  });
+  if (!resp.ok) throw new Error('登录失败');
+  let token = resp.headers.get('Authorization');
+  if (!token) {
+    const body = await resp.json();
+    token = body.data?.access_token;
   }
-];
+  if (!token) throw new Error('未获取到token');
+  authToken.value = token;
+}
 
-// 响应式状态
-const selectedTemplate = ref('');
-const fieldValues = ref({});
-const previewVisible = ref(false);
-const uploadedFiles = ref([]);
+async function handleFileChange(fileEvent) {
+  let file = fileEvent.raw || fileEvent.target?.files?.[0] || fileEvent;
+  if (!file) return;
+  fileName.value = file.name;
+  if (file.type === 'text/plain') {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      form.value.template = e.target.result;
+    };
+    reader.readAsText(file);
+  } else if (
+    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    const arrayBuffer = await file.arrayBuffer();
+    const { value } = await mammoth.extractRawText({ arrayBuffer });
+    form.value.template = value;
+  } else {
+    form.value.template = '';
+    fileName.value = '';
+    alert('仅支持 txt 或 docx 文件');
+  }
+}
 
-// 计算当前选择的模板
-const currentTemplate = computed(() => {
-  return templates.find(t => t.id === selectedTemplate.value);
-});
+async function handleSubmit() {
+  formRef.value.validate(async (valid) => {
+    if (!valid) return
+    loading.value = true
+    error.value = ''
+    progress.value = 0
+    try {
+      await login();
+      // 1. 第一次set，空DSL，获取id和title
+      const emptySetPayload = {
+        title: `test_${Math.random().toString(36).slice(2, 10)}`,
+        dsl: {
+          graph: {
+            nodes: [
+              {
+                id: 'begin',
+                type: 'beginNode',
+                position: { x: 50, y: 200 },
+                data: { label: 'Begin', name: 'begin' },
+                sourcePosition: 'left',
+                targetPosition: 'right'
+              }
+            ],
+            edges: []
+          },
+          components: {
+            begin: {
+              obj: { component_name: 'Begin', params: {} },
+              downstream: [],
+              upstream: []
+            }
+          },
+          messages: [],
+          reference: [],
+          history: [],
+          path: [],
+          answer: []
+        }
+      }
+      const setResp1 = await fetch('http://127.0.0.1/v1/canvas/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken.value
+        },
+        body: JSON.stringify(emptySetPayload)
+      })
+      if (!setResp1.ok) throw new Error('首次set接口失败')
+      const setJson1 = await setResp1.json()
+      const unique_id = setJson1.data?.id
+      const set_title = setJson1.data?.title
+      if (!unique_id || !set_title) throw new Error('首次set未返回id或title')
 
-// 处理文件上传
-const handleFileChange = (file) => {
-  uploadedFiles.value.push(file);
-  ElMessage.success(`文件 ${file.name} 已选择`);
-};
+      // 2. 用public/dsl.json内容，带id和title再次set
+      const dslResp = await fetch('/dsl.json')
+      if (!dslResp.ok) throw new Error('dsl.json 读取失败')
+      const dslData = await dslResp.json()
+      dslData.id = unique_id
+      dslData.title = set_title
+      const setResp2 = await fetch('http://127.0.0.1/v1/canvas/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken.value
+        },
+        body: JSON.stringify(dslData)
+      })
+      if (!setResp2.ok) throw new Error('第二次set接口失败')
 
-// AI辅助填充
-const aiAssistFill = () => {
-  ElMessage.info('正在使用AI智能填充内容...');
-  // 模拟AI填充过程
-  setTimeout(() => {
-    if (selectedTemplate.value === 'research-report') {
-      fieldValues.value = {
-        title: '基于深度学习的图像识别研究',
-        abstract: '本研究探讨了深度学习在图像识别领域的应用，通过对比不同模型的性能，提出了一种改进的卷积神经网络结构，实验表明该结构在准确率和处理速度方面均有显著提升。',
-        introduction: '随着人工智能技术的快速发展，深度学习在图像识别领域展现出巨大潜力...',
-        methodology: '本研究采用了对比实验法，选取了ResNet、VGG和自研模型进行性能对比...',
-        results: '实验结果表明，改进后的模型在CIFAR-10数据集上的准确率达到95.7%，比基准模型提高了2.3个百分点...',
-        conclusion: '通过本研究，我们证明了所提出的改进模型在图像识别任务中的有效性...',
-        references: '1. He, K., et al. (2016). Deep Residual Learning for Image Recognition.\n2. Simonyan, K., & Zisserman, A. (2014). Very Deep Convolutional Networks for Large-Scale Image Recognition.'
-      };
-    } else if (selectedTemplate.value === 'project-proposal') {
-      // 其他模板的AI填充内容
-      fieldValues.value = {
-        title: '智能城市交通流量优化系统',
-        summary: '本项目旨在开发一套基于AI的城市交通流量优化系统，通过实时数据分析和预测，为城市交通管理提供决策支持。',
-        objectives: '1. 减少交通拥堵时间30%\n2. 降低交通事故率15%\n3. 提高公共交通使用率20%',
-        methodology: '本项目将采用机器学习和大数据分析技术，结合城市交通实时数据，构建交通流量预测模型...',
-        timeline: '第一阶段(3个月)：数据收集与清洗\n第二阶段(4个月)：模型开发与测试\n第三阶段(2个月)：系统集成\n第四阶段(3个月)：试运行与优化',
-        budget: '研发人员费用：50万元\n硬件设备：30万元\n软件许可：10万元\n运营费用：20万元\n总计：110万元',
-        team: '项目经理：张三\n技术负责人：李四\n数据科学家：王五\n软件工程师：赵六、钱七'
-      };
+      // 3. 替换query和graph.nodes中相关字段后，再set
+      // 替换 components.begin.obj.params.query
+      const queryList = dslData.dsl?.components?.begin?.obj?.params?.query || []
+      for (const q of queryList) {
+        if (q.key === 'instruction') q.value = form.value.instruction
+        if (q.key === 'topic') q.value = form.value.topic
+        if (q.key === 'template') q.value = form.value.template
+      }
+      // 替换 graph.nodes 里的 form.query
+      const nodes = dslData.dsl?.graph?.nodes || []
+      for (const node of nodes) {
+        const formObj = node.data?.form
+        if (formObj && Array.isArray(formObj.query)) {
+          for (const q of formObj.query) {
+            if (q.key === 'instruction') q.value = form.value.instruction
+            if (q.key === 'topic') q.value = form.value.topic
+            if (q.key === 'template') q.value = form.value.template
+          }
+        }
+      }
+      const setResp3 = await fetch('http://127.0.0.1/v1/canvas/set', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken.value
+        },
+        body: JSON.stringify(dslData)
+      })
+      if (!setResp3.ok) throw new Error('第三次set接口失败')
+
+      // 4. reset
+      const resetResp = await fetch('http://127.0.0.1/v1/canvas/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken.value
+        },
+        body: JSON.stringify({ id: unique_id })
+      })
+      if (!resetResp.ok) throw new Error('reset接口失败')
+
+      // 5. completion
+      const completionResp = await fetch('http://127.0.0.1/v1/canvas/completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken.value
+        },
+        body: JSON.stringify({ id: unique_id })
+      })
+      if (!completionResp.ok) throw new Error('completion接口失败')
+      // 读取 completion 流式响应
+      const reader = completionResp.body.getReader()
+      const decoder = new TextDecoder()
+      let done = false
+      let chunkCount = 0
+      const maxChunks = 20
+      let answer = ''
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+        if (value) {
+          chunkCount++
+          progress.value = Math.min(99, Math.floor((chunkCount / maxChunks) * 100))
+        }
+        const text = decoder.decode(value, { stream: true })
+        const lines = text.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const dataStr = line.substring(5).trim()
+            if (dataStr === '[DONE]' || !dataStr) continue
+            try {
+              const data = JSON.parse(dataStr)
+              if (data.data && data.data.answer) {
+                answer = data.data.answer
+              }
+            } catch (e) { /* ignore JSON parse errors */ }
+          }
+        }
+      }
+      progress.value = 100
+      setTimeout(() => { progress.value = 0 }, 500)
+      router.push({ path: '/report-result', query: { report: answer } })
+    } catch (e) {
+      error.value = e?.message || '请求失败'
+    } finally {
+      loading.value = false
     }
-    ElMessage.success('AI智能填充完成！');
-  }, 1500);
-};
-
-// 预览报告
-const previewReport = () => {
-  if (!selectedTemplate.value) {
-    ElMessage.warning('请先选择一个报告模板');
-    return;
-  }
-  previewVisible.value = true;
-};
-
-// 导出报告
-const handleExport = (format) => {
-  if (!selectedTemplate.value) {
-    ElMessage.warning('请先选择一个报告模板');
-    return;
-  }
-  ElMessage.success(`报告已导出为${format === 'pdf' ? 'PDF' : 'Word'}格式`);
-  // 实际导出逻辑将连接到后端API
-};
+  })
+}
 </script>
 
-<style scoped>
-.report-generation-view {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
+<style>
+.report-generation-simple-bg {
+  min-height: 100vh;
+  background: #fff;
+  position: relative;
+  overflow-x: hidden;
 }
-
-.main-title {
-  font-size: 2rem;
-  font-weight: bold;
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.subtitle {
-  font-size: 1rem;
-  color: #666;
-  margin-bottom: 30px;
-}
-
-.template-selection,
-.content-area,
-.action-area {
-  margin-bottom: 30px;
-}
-
-.field-item {
-  margin-bottom: 20px;
-}
-
-.field-item h4 {
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.ai-assist {
-  margin: 20px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.tip {
-  font-size: 0.9rem;
-  color: #999;
-  margin-top: 8px;
-}
-
-.action-area {
-  display: flex;
-  gap: 16px;
-}
-
-.no-template {
+.simple-header {
+  width: 100%;
+  padding: 40px 0 16px 0;
+  background: #fff;
   text-align: center;
-  padding: 30px;
-  color: #999;
+  margin-bottom: 24px;
 }
-
-.report-preview {
-  padding: 20px;
-  background: #f9f9f9;
-  border-radius: 4px;
-}
-
-.preview-field {
-  margin-bottom: 20px;
-}
-
-.preview-field h3 {
-  margin-bottom: 8px;
+.main-title {
+  font-size: 2.1rem;
+  font-weight: bold;
   color: #333;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
 }
-
-.preview-field p {
+.subtitle {
+  color: #888;
+  font-size: 1.05em;
+  margin-bottom: 0;
+}
+.gen-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(64,158,255,0.08);
+  background: #fff;
+  margin-bottom: 32px;
+  padding: 0 0 24px 0;
+  transition: box-shadow 0.2s;
+}
+.gen-card:hover {
+  box-shadow: 0 6px 24px rgba(64,158,255,0.13);
+}
+.form-section {
+  margin-bottom: 0;
+  padding: 24px 24px 0 24px;
+}
+.el-form-item__content {
+  padding-left: 0 !important;
+}
+.file-name {
+  margin-left: 12px;
+  color: #409EFF;
+  font-size: 0.98em;
+  vertical-align: middle;
+}
+.result-card {
+  margin-top: 32px;
+  background: #f6f8fa;
+  padding: 1.5em;
+  border-radius: 12px;
   white-space: pre-wrap;
-  color: #666;
+  font-size: 1.08em;
+  animation: fadeInUp 0.6s;
+  box-shadow: 0 2px 12px rgba(64,158,255,0.08);
+}
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2em;
+  font-weight: bold;
+  color: #409EFF;
+  margin-bottom: 8px;
+}
+.result-icon {
+  font-size: 1.4em;
+}
+.result-title {
+  font-weight: 600;
+}
+.result-divider {
+  margin: 8px 0 18px 0;
+}
+.mt-2 {
+  margin-top: 16px;
+}
+.mt-3 {
+  margin-top: 24px;
+}
+.fade-slide-enter-active {
+  animation: fadeInUp 0.6s;
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.form-tip {
+  color: #888;
+  font-size: 0.98em;
+  margin-top: 2px;
+}
+.gen-card .el-input__inner {
+  padding-left: 8px !important;
+}
+.loading-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 500px;
+}
+.loading-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 60px 40px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(13, 110, 253, 0.1);
+  text-align: center;
+  max-width: 500px;
+  width: 100%;
+}
+.loading-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 12px 0;
+}
+.loading-content p {
+  color: #6c757d;
+  margin: 0 0 24px 0;
+}
+.loading-spinner {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+}
+.spinner-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 3px solid transparent;
+  border-top: 3px solid #0d6efd;
+  border-radius: 50%;
+  animation: spin 1.5s linear infinite;
+}
+.spinner-ring:nth-child(2) {
+  width: 70%;
+  height: 70%;
+  top: 15%;
+  left: 15%;
+  border-top-color: #0a58ca;
+  animation-delay: 0.5s;
+}
+.spinner-ring:nth-child(3) {
+  width: 40%;
+  height: 40%;
+  top: 30%;
+  left: 30%;
+  border-top-color: #084298;
+  animation-delay: 1s;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.loading-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  background: #0d6efd;
+  border-radius: 50%;
+  animation: dots 1.4s ease-in-out infinite both;
+}
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes dots {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
 }
 </style> 
