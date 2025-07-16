@@ -390,8 +390,10 @@ async function handleSubmit() {
             if (dataStr === '[DONE]' || !dataStr) continue
             try {
               const data = JSON.parse(dataStr)
-              if (data.data && data.data.answer) {
-                answer = data.data.answer
+              if (data.data) {
+                if (data.data.answer) {
+                  answer = data.data.answer
+                }
               }
             } catch (e) { /* ignore JSON parse errors */ }
           }
