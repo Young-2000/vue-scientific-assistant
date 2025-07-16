@@ -9,6 +9,9 @@
           <el-button type="primary" @click="goBack" style="margin-top: 32px;">
             返回
           </el-button>
+          <el-button type="warning" @click="exportDocx" style="margin-top: 32px; margin-left: 16px;">
+            导出为 Word
+          </el-button>
         </div>
       </el-col>
     </el-row>
@@ -19,6 +22,8 @@
 import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import htmlDocx from 'html-docx-js/dist/html-docx'
+import { saveAs } from 'file-saver'
 const route = useRoute()
 const router = useRouter()
 const reportRaw = route.query.report || '无内容'
@@ -32,6 +37,27 @@ function renderMarkdown(content) {
 
 function goBack() {
   router.push('/report')
+}
+
+function exportDocx() {
+  // 1. 先把 Markdown 转成 HTML
+  let htmlContent = marked.parse(reportRaw)
+  // 2. 包装成完整 HTML 文档
+  let content = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+    </html>
+  `
+  // 3. 转成 docx Blob
+  let converted = htmlDocx.asBlob(content)
+  // 4. 下载
+  saveAs(converted, '报告.docx')
 }
 </script>
 
