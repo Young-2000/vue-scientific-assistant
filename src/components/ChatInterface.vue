@@ -129,6 +129,8 @@ const login = async () => {
 
     console.log('headers:', headers.value);
 
+
+//获取知识库列表
     try {
       // 调用 kb_list 接口
       const response_kb_list = await fetch('http://127.0.0.1/v1/kb/list', {

@@ -47,6 +47,38 @@
                 <div class="form-tip">模板为必填项，仅支持 txt 或 docx 文件。</div>
               </template>
             </el-form-item>
+            
+            <!-- 添加知识库选择 -->
+            <el-form-item label="选择知识库" class="kb-selection">
+              <div v-if="kbLoading" class="kb-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span>正在加载知识库列表...</span>
+              </div>
+              <div v-else-if="kbError" class="kb-error">
+                <el-icon><WarningFilled /></el-icon>
+                <span>{{ kbError }}</span>
+                <el-button type="primary" link @click="loadKnowledgeBases">重试</el-button>
+              </div>
+              <div v-else-if="knowledgeBases.length === 0" class="kb-empty">
+                <el-icon><InfoFilled /></el-icon>
+                <span>暂无可用知识库</span>
+              </div>
+              <el-radio-group v-else v-model="selectedKbId" class="kb-radio-group">
+                <el-radio 
+                  v-for="kb in knowledgeBases" 
+                  :key="kb.id" 
+                  :label="kb.id" 
+                  border
+                  class="kb-radio-item"
+                >
+                  {{ kb.name }}
+                </el-radio>
+              </el-radio-group>
+              <template #description>
+                <div class="form-tip">选择要用于生成报告的知识库（可选）。</div>
+              </template>
+            </el-form-item>
+
             <el-form-item>
               <el-button type="primary" native-type="submit" :loading="loading" style="width: 100%;">
                 <el-icon><MagicStick /></el-icon>
@@ -79,10 +111,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import mammoth from 'mammoth'
 import { useRouter } from 'vue-router'
-import { Document, UploadFilled, MagicStick } from '@element-plus/icons-vue'
+import { 
+  Document, 
+  UploadFilled, 
+  MagicStick, 
+  Loading, 
+  WarningFilled, 
+  InfoFilled 
+} from '@element-plus/icons-vue'
 
 const form = ref({
   instruction: '',
@@ -96,6 +135,12 @@ const loading = ref(false)
 const error = ref('')
 const progress = ref(0)
 const formRef = ref()
+
+// 知识库相关
+const knowledgeBases = ref([])
+const selectedKbId = ref('')
+const kbLoading = ref(false)
+const kbError = ref('')
 
 const rules = {
   topic: [
@@ -126,6 +171,50 @@ async function login() {
   }
   if (!token) throw new Error('未获取到token');
   authToken.value = token;
+  return token;
+}
+
+// 加载知识库列表
+async function loadKnowledgeBases() {
+  kbLoading.value = true;
+  kbError.value = '';
+  
+  try {
+    // 确保已登录
+    const token = authToken.value || await login();
+    
+    // 获取知识库列表
+    const response = await fetch('http://127.0.0.1/v1/kb/list', {
+      method: 'GET',
+      headers: {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('获取知识库列表失败');
+    }
+    
+    const data = await response.json();
+    console.log('知识库列表返回数据:', data);
+    
+    if (data.code === 0 && data.data && data.data.kbs) {
+      knowledgeBases.value = data.data.kbs.map(kb => ({
+        id: kb.id,
+        name: kb.name || `知识库 ${kb.id}`
+      }));
+      console.log('处理后的知识库列表:', knowledgeBases.value);
+    } else {
+      knowledgeBases.value = [];
+      console.log('未找到知识库或返回格式不正确');
+    }
+  } catch (err) {
+    console.error('加载知识库失败:', err);
+    kbError.value = err.message || '加载知识库失败';
+  } finally {
+    kbLoading.value = false;
+  }
 }
 
 async function handleFileChange(fileEvent) {
@@ -228,6 +317,7 @@ async function handleSubmit() {
         if (q.key === 'topic') q.value = form.value.topic
         if (q.key === 'template') q.value = form.value.template
       }
+      
       // 替换 graph.nodes 里的 form.query
       const nodes = dslData.dsl?.graph?.nodes || []
       for (const node of nodes) {
@@ -239,7 +329,14 @@ async function handleSubmit() {
             if (q.key === 'template') q.value = form.value.template
           }
         }
+        
+        // 添加选中的知识库ID到kb_ids字段
+        if (formObj && formObj.kb_ids !== undefined && selectedKbId.value) {
+          formObj.kb_ids = [selectedKbId.value];
+          console.log(`已将知识库ID ${selectedKbId.value} 添加到节点 ${node.id}`);
+        }
       }
+      
       const setResp3 = await fetch('http://127.0.0.1/v1/canvas/set', {
         method: 'POST',
         headers: {
@@ -310,6 +407,15 @@ async function handleSubmit() {
     }
   })
 }
+
+// 组件挂载时加载知识库列表
+onMounted(async () => {
+  try {
+    await loadKnowledgeBases();
+  } catch (err) {
+    console.error('初始化知识库列表失败:', err);
+  }
+});
 </script>
 
 <style>
@@ -490,5 +596,40 @@ async function handleSubmit() {
 @keyframes dots {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
+}
+
+/* 知识库选择样式 */
+.kb-selection {
+  margin-bottom: 20px;
+}
+
+.kb-loading, .kb-error, .kb-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
+
+.kb-error {
+  color: #dc3545;
+  background-color: #f8d7da;
+}
+
+.kb-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kb-radio-item {
+  margin-right: 0 !important;
+  margin-bottom: 10px;
+}
+
+.kb-radio-item .el-radio__label {
+  padding-left: 8px;
 }
 </style> 

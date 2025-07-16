@@ -164,7 +164,7 @@ import {
 } from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import ReferenceDisplay from './ReferenceDisplay.vue';
+import ReferenceDisplay from '@/components/ReferenceDisplay.vue';
 
 // 定义props
 const props = defineProps({
