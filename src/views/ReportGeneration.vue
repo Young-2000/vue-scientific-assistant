@@ -375,6 +375,7 @@ async function handleSubmit() {
       let chunkCount = 0
       const maxChunks = 20
       let answer = ''
+      let buffer = '' // 新增缓存
       while (!done) {
         const { value, done: readerDone } = await reader.read()
         done = readerDone
@@ -383,7 +384,11 @@ async function handleSubmit() {
           progress.value = Math.min(99, Math.floor((chunkCount / maxChunks) * 100))
         }
         const text = decoder.decode(value, { stream: true })
-        const lines = text.split('\n')
+        buffer += text // 累加到缓存
+        // 按行分割
+        let lines = buffer.split('\n')
+        // 最后一行可能是不完整的，留到下次
+        buffer = lines.pop() // 取出最后一行，留作下次拼接
         for (const line of lines) {
           if (line.startsWith('data:')) {
             const dataStr = line.substring(5).trim()
@@ -393,9 +398,16 @@ async function handleSubmit() {
               if (data.data) {
                 if (data.data.answer) {
                   answer = data.data.answer
+                  console.log('answer:', answer)
                 }
               }
-            } catch (e) { /* ignore JSON parse errors */ }
+            } catch (e) {
+              console.log('JSON parse error:', e, dataStr)
+              answer = "生成失败，请重试"
+              // 解析失败，可能是数据还没收全，留到下次
+              buffer = line + '\n' + buffer // 把这行加回缓存，下次再试
+              break // 跳出本轮，等下次数据
+            }
           }
         }
       }

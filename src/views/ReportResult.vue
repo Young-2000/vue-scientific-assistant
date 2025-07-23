@@ -36,7 +36,12 @@ function renderMarkdown(content) {
 }
 
 function goBack() {
-  router.push('/report')
+  // 新增：根据来源跳转
+  if (route.query.from === 'aiwriting') {
+    router.push('/ai-writing')
+  } else {
+    router.push('/report')
+  }
 }
 
 function exportDocx() {

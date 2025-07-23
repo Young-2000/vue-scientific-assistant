@@ -27,6 +27,7 @@
       <el-menu-item index="/ocr">OCR识别</el-menu-item>
       <el-menu-item index="/document-summary">文档摘要</el-menu-item>
       <el-menu-item index="/mind-map">思维导图</el-menu-item>
+      <el-menu-item index="/ai-writing">AI写作</el-menu-item>
     </el-menu>
 
     <!-- 历史对话 -->
