@@ -5,8 +5,6 @@ import ReportResult from '@/views/ReportResult.vue'
 import KnowledgeQA from '@/views/KnowledgeQA.vue'
 import KnowledgeQAResult from '@/views/KnowledgeQAResult.vue'
 import OCRRecognition from '@/views/OCRRecognition.vue'
-import DocumentSummary from '@/views/DocumentSummary.vue'
-import MindMap from '@/views/MindMap.vue'
 import ChatInterface from '../components/ChatInterface.vue'
 import AIWriting from '@/views/AIWriting.vue'
 
@@ -23,8 +21,6 @@ const routes = [
     props: (route) => ({ question: route.query.question })
   },
   { path: '/ocr', name: 'OCR识别', component: OCRRecognition },
-  { path: '/document-summary', name: '文档摘要', component: DocumentSummary },
-  { path: '/mind-map', name: '思维导图', component: MindMap },
   { path: '/ai-writing', name: 'AI写作', component: AIWriting },
   {
     path: '/chat',

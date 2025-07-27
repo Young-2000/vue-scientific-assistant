@@ -17,6 +17,40 @@
           class="search-input"
           @keyup.enter.ctrl="handleSearch"
         />
+        
+        <!-- 知识库选择 -->
+        <div class="kb-selection-wrapper">
+          <el-form-item label="选择知识库" class="kb-selection">
+            <div v-if="kbLoading" class="kb-loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span>正在加载知识库列表...</span>
+            </div>
+            <div v-else-if="kbError" class="kb-error">
+              <el-icon><Warning /></el-icon>
+              <span>{{ kbError }}</span>
+              <el-button type="primary" link @click="loadKnowledgeBases">重试</el-button>
+            </div>
+            <div v-else-if="knowledgeBases.length === 0" class="kb-empty">
+              <el-icon><InfoFilled /></el-icon>
+              <span>暂无可用知识库</span>
+            </div>
+            <el-radio-group v-else v-model="selectedKbId" class="kb-radio-group">
+              <el-radio 
+                v-for="kb in knowledgeBases" 
+                :key="kb.id" 
+                :label="kb.id" 
+                border
+                class="kb-radio-item"
+              >
+                {{ kb.name }}
+              </el-radio>
+            </el-radio-group>
+            <template #description>
+              <div class="form-tip">选择要用于问答的知识库。</div>
+            </template>
+          </el-form-item>
+        </div>
+        
         <div class="search-actions">
           <el-button 
             type="primary" 
@@ -42,6 +76,7 @@
         <div class="instructions-content">
           <ul>
             <li>在搜索框中输入您的问题，支持多行输入</li>
+            <li>选择要使用的知识库</li>
             <li>点击搜索按钮或按 Ctrl+Enter 开始搜索</li>
             <li>系统将基于知识库内容为您提供准确答案</li>
             <li>同时展示相关文档和问题建议</li>
@@ -53,9 +88,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { Search } from '@element-plus/icons-vue';
+import { Search, Loading, Warning, InfoFilled } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
 const router = useRouter();
 
@@ -63,16 +99,104 @@ const router = useRouter();
 const query = ref('');
 const isLoading = ref(false);
 
+// 知识库相关
+const kbLoading = ref(false);
+const kbError = ref('');
+const knowledgeBases = ref([]);
+const selectedKbId = ref('');
+
+// 登录函数
+const login = async () => {
+  const loginData = {
+    email: '123@123.com',
+    password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
+  };
+  const resp = await fetch('http://127.0.0.1/v1/user/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginData)
+  });
+  if (!resp.ok) throw new Error('登录失败');
+  let token = resp.headers.get('Authorization');
+  if (!token) {
+    const body = await resp.json();
+    token = body.data?.access_token;
+  }
+  if (!token) throw new Error('未获取到token');
+  return token;
+};
+
+// 加载知识库列表
+const loadKnowledgeBases = async () => {
+  kbLoading.value = true;
+  kbError.value = '';
+  
+  try {
+    // 确保已登录
+    const token = await login();
+    
+    // 获取知识库列表
+    const response = await fetch('http://127.0.0.1/v1/kb/list', {
+      method: 'GET',
+      headers: {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('获取知识库列表失败');
+    }
+    
+    const data = await response.json();
+    console.log('知识库列表返回数据:', data);
+    
+    if (data.code === 0 && data.data && data.data.kbs) {
+      knowledgeBases.value = data.data.kbs.map(kb => ({
+        id: kb.id,
+        name: kb.name || `知识库 ${kb.id}`
+      }));
+      console.log('处理后的知识库列表:', knowledgeBases.value);
+    } else {
+      knowledgeBases.value = [];
+      console.log('未找到知识库或返回格式不正确');
+    }
+  } catch (err) {
+    console.error('加载知识库失败:', err);
+    kbError.value = err.message || '加载知识库失败';
+  } finally {
+    kbLoading.value = false;
+  }
+};
+
+// 组件挂载时加载知识库列表
+onMounted(async () => {
+  try {
+    await loadKnowledgeBases();
+  } catch (err) {
+    console.error('初始化知识库列表失败:', err);
+  }
+});
+
 // 处理搜索
 const handleSearch = () => {
   if (!query.value.trim() || isLoading.value) return;
 
+  // 检查是否选择了知识库
+  if (!selectedKbId.value) {
+    ElMessage.warning('请先选择知识库');
+    return;
+  }
+
   isLoading.value = true;
   
-  // 跳转到结果页面，传递问题参数
+  // 跳转到结果页面，传递问题参数和知识库ID
   router.push({
     path: '/knowledge-qa-result',
-    query: { question: query.value.trim() }
+    query: { 
+      question: query.value.trim(),
+      selectedKbId: selectedKbId.value
+    }
   });
 };
 </script>
@@ -109,14 +233,19 @@ const handleSearch = () => {
 
 .search-container {
   background: #fff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid #e8eaed;
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease;
+}
+
+.search-container:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .search-input {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .search-input :deep(.el-textarea__inner) {
@@ -126,11 +255,83 @@ const handleSearch = () => {
   font-size: 16px;
   resize: none;
   background: #f8f9fa;
+  line-height: 1.5;
 }
 
 .search-input :deep(.el-textarea__inner:focus) {
   background: #fff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.kb-selection-wrapper {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #fafbfc;
+  border-radius: 6px;
+  border: 1px solid #e8eaed;
+  border-top: none;
+  margin-top: -8px;
+}
+
+.kb-selection {
+  margin-bottom: 0;
+}
+
+.kb-selection :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #5f6368;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.kb-loading, .kb-error, .kb-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  color: #5f6368;
+  font-size: 0.85rem;
+}
+
+.kb-error {
+  color: #d93025;
+}
+
+.kb-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kb-radio-item {
+  margin-right: 0 !important;
+  margin-bottom: 6px;
+}
+
+.kb-radio-item :deep(.el-radio__input) {
+  margin-right: 4px;
+}
+
+.kb-radio-item .el-radio__label {
+  padding-left: 4px;
+  font-size: 0.85rem;
+  color: #5f6368;
+}
+
+.kb-radio-item :deep(.el-radio__inner) {
+  width: 14px;
+  height: 14px;
+}
+
+.kb-radio-item :deep(.el-radio__inner::after) {
+  width: 6px;
+  height: 6px;
+}
+
+.form-tip {
+  color: #9aa0a6;
+  font-size: 0.75rem;
+  margin-top: 3px;
 }
 
 .search-actions {
@@ -141,6 +342,20 @@ const handleSearch = () => {
 .search-button {
   padding: 12px 24px;
   font-size: 16px;
+  background-color: #1a73e8;
+  border-color: #1a73e8;
+  transition: all 0.2s ease;
+}
+
+.search-button:hover {
+  background-color: #1557b0;
+  border-color: #1557b0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+}
+
+.search-button:active {
+  transform: translateY(0);
 }
 
 .instructions-section {

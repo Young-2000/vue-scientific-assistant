@@ -143,7 +143,18 @@
       :references="referencePopup.displayReferences"
       :visible="referencePopup.visible"
       :position="referencePopup.position"
+      :files="referencePopup.files"
       @close="closeReferencePopup"
+      @file-click="handleFileClick"
+    />
+    
+    <!-- 文件预览组件 - 最高层级 -->
+    <FilePreview
+      :visible="filePreviewVisible"
+      :doc-id="selectedFile?.doc_id"
+      :file-name="selectedFile?.doc_name"
+      :file-type="getFileType(selectedFile?.doc_name)"
+      @close="closeFilePreview"
     />
   </div>
 </template>
@@ -165,6 +176,7 @@ import {
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ReferenceDisplay from '@/components/ReferenceDisplay.vue';
+import FilePreview from '@/components/FilePreview.vue';
 
 // 定义props
 const props = defineProps({
@@ -192,7 +204,8 @@ const referencePopup = ref({
   visible: false,
   references: [], // 存储所有引用数据
   displayReferences: [], // 存储当前显示的引用数据
-  position: { x: 0, y: 0 }
+  position: { x: 0, y: 0 },
+  files: [] // 新增：存储文件引用
 });
 
 // API相关
@@ -200,6 +213,10 @@ const authToken = ref('');
 const headers = ref({});
 const kb_ids = ref([]);
 const controller = ref(null);
+
+// 文件预览相关
+const filePreviewVisible = ref(false);
+const selectedFile = ref(null);
 
 // 登录函数
 const login = async () => {
@@ -288,6 +305,14 @@ const performSearch = async () => {
   mainAnswer.value = '';
   relatedDocs.value = [];
   relatedQuestions.value = [];
+
+  // 使用选中的知识库
+  if (kb_ids.value.length === 0) {
+    hasError.value = true;
+    errorMessage.value = '请先选择一个知识库。';
+    isLoading.value = false;
+    return;
+  }
 
   // 三个请求并行发出
   const askPromise = sendAskStream();
@@ -432,6 +457,18 @@ const sendAskStream = async () => {
                 referencePopup.value.references = references;
                 console.log('累积更新引用数据，当前总数:', references.length);
                 console.log('最新引用数据:', newReferences);
+              }
+
+              // 处理文件引用
+              if (currentReferenceChunk.files && Array.isArray(currentReferenceChunk.files)) {
+                const newFiles = currentReferenceChunk.files.map(file => ({
+                  content: file.content || '',
+                  document_id: file.document_id || null,
+                  document_name: file.document_name || '未知文档'
+                }));
+                referencePopup.value.files = [...referencePopup.value.files, ...newFiles];
+                console.log('累积更新文件引用，当前总数:', referencePopup.value.files.length);
+                console.log('最新文件引用:', newFiles);
               }
 
               console.log('参考文献：', currentReferenceChunk);
@@ -604,13 +641,46 @@ const getRelatedQuestions = async () => {
 };
 
 // 选择相关问题
-const selectQuestion = (newQuestion) => {
-  // 更新当前问题并重新搜索
+const selectQuestion = async (newQuestion) => {
+  console.log('选择相关问题:', newQuestion);
+  
+  // 更新当前问题
   question.value = newQuestion;
+  
+  // 重置状态
+  isLoading.value = true;
+  hasResults.value = false;
+  hasError.value = false;
+  errorMessage.value = '';
+  mainAnswer.value = '';
+  relatedDocs.value = [];
+  relatedQuestions.value = [];
+  
+  // 清空引用弹出框数据
+  referencePopup.value = {
+    visible: false,
+    references: [],
+    displayReferences: [],
+    position: { x: 0, y: 0 },
+    files: []
+  };
+  
+  // 更新路由（可选，用于浏览器历史记录）
   router.push({
     path: '/knowledge-qa-result',
     query: { question: newQuestion }
   });
+  
+  // 直接执行搜索
+  try {
+    await performSearch();
+  } catch (error) {
+    console.error('相关问题搜索失败:', error);
+    hasError.value = true;
+    errorMessage.value = '搜索失败，请重试';
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 // Markdown渲染
@@ -636,7 +706,10 @@ const renderMarkdown = (content) => {
 
 // 监听路由变化
 watch(() => route.query.question, (newQuestion) => {
-  if (newQuestion && newQuestion !== question.value) {
+  // 只在组件初始化时或者手动输入URL时触发
+  // 避免与selectQuestion的直接搜索冲突
+  if (newQuestion && newQuestion !== question.value && !isLoading.value) {
+    console.log('路由变化触发搜索:', newQuestion);
     question.value = newQuestion;
     performSearch();
   }
@@ -653,7 +726,25 @@ onMounted(async () => {
 
   try {
     await login();
-    await performSearch();
+    
+    // 从路由参数获取选中的知识库ID
+    const selectedKbIdFromRoute = route.query.selectedKbId;
+    if (selectedKbIdFromRoute) {
+      kb_ids.value = [selectedKbIdFromRoute];
+      console.log('使用从主页面传递的知识库:', selectedKbIdFromRoute);
+    } else {
+      // 如果没有传递知识库ID，显示错误
+      hasError.value = true;
+      errorMessage.value = '未找到知识库信息';
+      isLoading.value = false;
+      return;
+    }
+    
+    // 如果已经有知识库ID，直接开始搜索
+    if (kb_ids.value.length > 0) {
+      await performSearch();
+    }
+    
     // 添加点击页面其他地方关闭弹出框的事件监听
     document.addEventListener('click', handleDocumentClick);
   } catch (error) {
@@ -749,17 +840,53 @@ const showDocReference = (doc, event) => {
     document_name: doc.doc_name || '未知文档'
   };
   
+  // 创建文件数据
+  const files = [{
+    doc_id: doc.document_id,
+    doc_name: doc.doc_name || '未知文档'
+  }];
+  
   console.log('显示文档参考:', reference);
+  console.log('文件数据:', files);
   
   // 显示引用弹出框
   referencePopup.value.visible = true;
   referencePopup.value.displayReferences = [reference];
+  referencePopup.value.files = files;
   referencePopup.value.position = {
     x: rect.left + rect.width / 2,
     y: rect.top - 10
   };
   
   console.log('文档参考弹出框数据:', referencePopup.value);
+};
+
+// 处理文件点击事件
+const handleFileClick = (file) => {
+  selectedFile.value = file;
+  filePreviewVisible.value = true;
+  console.log('文件预览弹出，文件:', file);
+};
+
+// 关闭文件预览
+const closeFilePreview = () => {
+  filePreviewVisible.value = false;
+  selectedFile.value = null;
+  console.log('文件预览关闭');
+};
+
+// 获取文件类型
+const getFileType = (fileName) => {
+  if (!fileName) return '';
+  const lowerCaseFileName = fileName.toLowerCase();
+  if (lowerCaseFileName.endsWith('.pdf')) return 'pdf';
+  if (lowerCaseFileName.endsWith('.docx')) return 'docx';
+  if (lowerCaseFileName.endsWith('.doc')) return 'doc';
+  if (lowerCaseFileName.endsWith('.xls') || lowerCaseFileName.endsWith('.xlsx')) return 'excel';
+  if (lowerCaseFileName.endsWith('.ppt') || lowerCaseFileName.endsWith('.pptx')) return 'ppt';
+  if (lowerCaseFileName.endsWith('.txt')) return 'txt';
+  if (lowerCaseFileName.endsWith('.md')) return 'markdown';
+  return '';
 };
 </script>
 
@@ -1486,53 +1613,35 @@ const showDocReference = (doc, event) => {
   border-radius: 4px;
 }
 
+/* 响应式设计 */
 @media (max-width: 768px) {
+  .knowledge-qa-result-view {
+    padding: 16px;
+  }
+  
   .content-container {
-    padding: 20px 16px;
-  }
-  
-  .header-content {
-    padding: 24px 20px;
-  }
-  
-  .title-section {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .icon-wrapper {
-    width: 50px;
-    height: 50px;
-  }
-  
-  .title-icon {
-    font-size: 24px;
+    padding: 16px;
   }
   
   .main-title {
-    font-size: 2rem;
-    text-align: center;
+    font-size: 1.8rem;
   }
   
-  .question-container,
-  .main-answer,
-  .related-docs,
+  .question-text {
+    font-size: 1rem;
+  }
+  
+  .answer-card {
+    padding: 20px;
+  }
+  
   .related-questions {
-    padding: 24px 20px;
+    grid-template-columns: 1fr;
   }
   
-  .questions-list {
-    flex-direction: column;
-  }
-  
-  .question-item {
-    text-align: left;
-    justify-content: flex-start;
-  }
-  
-  .loading-card,
-  .error-card {
-    padding: 40px 24px;
+  .reference-popup {
+    width: 95%;
+    max-width: none;
   }
 }
 

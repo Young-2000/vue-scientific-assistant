@@ -11,6 +11,7 @@
           <FileDisplay 
             v-if="message.type === 'ai' && message.files && message.files.length > 0 && message.references && message.references.length > 0"
             :files="message.files"
+            @file-click="handleFileClick"
           />
           
           <div class="message-time">{{ message.time }}</div>
@@ -26,6 +27,16 @@
       :position="referencePopup.position"
       :files="referencePopup.files"
       @close="closeReferencePopup"
+      @file-click="handleFileClick"
+    />
+    
+    <!-- 文件预览组件 - 最高层级 -->
+    <FilePreview
+      :visible="filePreviewVisible"
+      :doc-id="selectedFile?.doc_id"
+      :file-name="selectedFile?.doc_name"
+      :file-type="getFileType(selectedFile?.doc_name)"
+      @close="closeFilePreview"
     />
     
     <div class="chat-input">
@@ -53,6 +64,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ReferenceDisplay from './ReferenceDisplay.vue';
 import FileDisplay from './FileDisplay.vue';
+import FilePreview from './FilePreview.vue';
 
 const route = useRoute();
 const messages = ref([]);
@@ -61,14 +73,12 @@ const messagesContainer = ref(null);
 const authToken = ref('');
 const headers = ref({});
 const kb_ids = ref([]);
-// const kb_id = ref([]);
-const user_id = ref([]);
-const controller = ref(null); // 定义controller
-const latestAiMessage = ref(null); // 定义latestAiMessage
+const controller = ref(null);
+const latestAiMessage = ref(null);
 const conversation_id = ref('');
-const dialog_id = ref(''); // 新增 dialog_id
-const message_history = ref([]); // 新增 message_history
-const isLoading = ref(false); // 新增 loading 状态
+const dialog_id = ref('');
+const message_history = ref([]);
+const isLoading = ref(false);
 
 // 引用弹出状态
 const referencePopup = ref({
@@ -77,6 +87,10 @@ const referencePopup = ref({
   position: { x: 0, y: 0 },
   files: []
 });
+
+// 文件预览状态
+const filePreviewVisible = ref(false);
+const selectedFile = ref(null);
 
 const scrollToBottom = async () => {
   await nextTick();
@@ -87,104 +101,51 @@ const scrollToBottom = async () => {
 
 // 登录函数
 const login = async () => {
-  try {
-    const loginData = {
-      email: '123@123.com',
-      // password: '123'
-      password: "FN6pAfTq1saZeM+LtMwzA1Ao9fIQRct9OcVeJjhWul6Y+ki/Uzb4X6tvI1T591CFP2HmK6M4ZYbpT1OZM3rv9tvAE4c7S9nnXZ+ffg6w2Rq9OgOLCCbk5T7rapP6UxWD14aM62zbo1WtzSRKlC87Ik17U9UzPFlXbvdIEAzQr06GgRADmpvw3Msk05CvZTy9/f26q5TxlQOREFhZglTFTirosHdg09wnnA+f6CkZgm7Vvza+0ZJcRONmXUN8NFkY0rYxBJhaLUJQclFcGVjplVPbCQeSOafXI1yv3JN2NoV1e1s2A3LNdg0jxh6oEQ0TrveMyQfhytxNQqAGoT8lgg=="
-      };
-
-    console.log('开始登录...');
-    const response = await fetch('http://127.0.0.1/v1/user/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(loginData)
-    });
-
-    console.log('登录响应状态码:', response.status);
-    
-    if (!response.ok) {
-      throw new Error('登录失败');
-    }
-
-    // 从响应头获取token
-    const token = response.headers.get('Authorization');
-    if (token) {
-      authToken.value = token;
-      console.log('登录成功，获取到token:', token);
-    } else {
-      console.log('登录成功，但未获取到token');
-    }
-
-    headers.value = {
-        "Authorization": token,
-        "Content-Type": "application/json;charset=UTF-8",
-        "Accept": "application/json",
-    }
-
-    const user_data = await response.json();
-    user_id.value = user_data.data.id
-
-    console.log('headers:', headers.value);
-
-
-//获取知识库列表
-    try {
-      // 调用 kb_list 接口
-      const response_kb_list = await fetch('http://127.0.0.1/v1/kb/list', {
-        method: 'GET',
-        headers: headers.value,
-      });
-
-      console.log('kb_list 请求状态码:', response_kb_list.status);
-
-      if (!response_kb_list.ok) {
-        throw new Error('获取知识库列表失败');
-      }
-
-      const kb_data = await response_kb_list.json();
-      console.log('kb_list 返回内容:', JSON.stringify(kb_data, null, 2));
-
-      // 提取 kb_ids
-      if (kb_data.code === 0 && kb_data.data) {
-        const kb_list = kb_data.data.kbs || [];
-        kb_ids.value = kb_list
-          .filter(kb => kb.id)
-          .map(kb => kb.id);
-
-        console.log('提取的 kb_ids:', kb_ids.value);
-      } else {
-        console.log('知识库列表为空或格式不正确');
-        kb_ids.value = [];
-      }
-
-    } catch (error) {
-      console.error('获取知识库列表失败:', error);
-      messages.value.push({
-        type: 'ai',
-        content: '获取知识库列表失败，请刷新页面重试。',
-        time: new Date().toLocaleTimeString()
-      });
-    }
-  } catch (error) {
-    console.error('登录失败:', error);
-    messages.value.push({
-      type: 'ai',
-      content: '登录失败，请刷新页面重试。',
-      time: new Date().toLocaleTimeString()
-    });
+  const loginData = {
+    email: '123@123.com',
+    password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
+  };
+  const resp = await fetch('http://127.0.0.1/v1/user/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginData)
+  });
+  if (!resp.ok) throw new Error('登录失败');
+  let token = resp.headers.get('Authorization');
+  if (!token) {
+    const body = await resp.json();
+    token = body.data?.access_token;
   }
+  if (!token) throw new Error('未获取到token');
+  authToken.value = token;
+  headers.value = {
+    'Authorization': token,
+    'Content-Type': 'application/json'
+  };
+  return token;
 };
 
 // 创建 dialog
 const createDialog = async (kb_ids_param) => {
   try {
+    console.log('开始创建 dialog，kb_ids_param:', kb_ids_param);
+    
+    // 验证知识库ID参数
+    if (!kb_ids_param || (Array.isArray(kb_ids_param) && kb_ids_param.length === 0)) {
+      console.error('知识库ID参数无效:', kb_ids_param);
+      throw new Error('知识库ID参数无效');
+    }
+    
     // 如果传入的是数组，取第一个元素作为 kb_id
     const kb_id = Array.isArray(kb_ids_param) ? kb_ids_param[0] : kb_ids_param;
     console.log('原始 kb_ids_param:', kb_ids_param);
     console.log('使用的 kb_id:', kb_id);
+    
+    // 验证kb_id是否有效
+    if (!kb_id) {
+      console.error('知识库ID为空');
+      throw new Error('知识库ID为空');
+    }
     
     const url = "http://127.0.0.1/v1/dialog/set";
     const payload = {
@@ -258,7 +219,9 @@ const createDialog = async (kb_ids_param) => {
 // 创建 conversation
 const createConversation = async (dialogId) => {
   try {
-    message_history.value = []; // 每次新对话清空历史
+    console.log('开始创建 conversation，dialogId:', dialogId);
+    // 不要在这里清空 message_history，让调用方决定何时清空
+    // message_history.value = []; // 移除这行
 
     const url = "http://127.0.0.1/v1/conversation/set";
     const full_uuid = crypto.randomUUID(); // 使用 Web Crypto API 生成 UUID
@@ -271,6 +234,9 @@ const createConversation = async (dialogId) => {
       "content": "你好！ 我是你的助理，有什么可以帮到你的吗？",
     };
     message_history.value.push(assistant_message);
+    
+    console.log('添加初始助手消息到历史:', assistant_message);
+    console.log('当前 message_history:', message_history.value);
 
     const payload = {
       "conversation_id": new_conversation_id,
@@ -332,12 +298,16 @@ const sendMessage = async () => {
   scrollToBottom();
 
   // 添加用户消息到 message_history
-  message_history.value.push({
+  const userMessageForHistory = {
     "id": crypto.randomUUID(),
     "role": "user",
     "content": userMessageContent,
     "doc_ids": [] // 根据后端需要，可以添加文档ID
-  });
+  };
+  message_history.value.push(userMessageForHistory);
+  
+  console.log('添加用户消息到历史:', userMessageForHistory);
+  console.log('当前 message_history 长度:', message_history.value.length);
   
   // 取消之前的请求
   if (controller.value) {
@@ -346,6 +316,44 @@ const sendMessage = async () => {
   controller.value = new AbortController();
   
   try {
+    // 如果还没有创建dialog和conversation，先创建
+    if (!dialog_id.value) {
+      // 验证知识库ID
+      if (!kb_ids.value || kb_ids.value.length === 0) {
+        console.error('知识库ID为空，无法创建对话');
+        throw new Error('知识库ID为空，请返回主页面选择知识库');
+      }
+      
+      // 保存用户消息内容，因为创建对话时会清空消息历史
+      const savedUserMessageContent = userMessageContent;
+      
+      // 清空消息历史，准备开始新对话
+      message_history.value = [];
+      console.log('清空消息历史，准备开始新对话');
+      
+      const createdDialogId = await createDialog(kb_ids.value);
+      if (!createdDialogId) {
+        console.error('创建dialog失败');
+        throw new Error('创建对话失败，请重试');
+      }
+      
+      const createdConversationId = await createConversation(createdDialogId);
+      if (!createdConversationId) {
+        console.error('创建conversation失败');
+        throw new Error('创建对话失败，请重试');
+      }
+      
+      // 重新添加用户消息到历史
+      const userMessageForHistory = {
+        "id": crypto.randomUUID(),
+        "role": "user",
+        "content": savedUserMessageContent,
+        "doc_ids": []
+      };
+      message_history.value.push(userMessageForHistory);
+      console.log('重新添加用户消息到历史:', userMessageForHistory);
+    }
+
     // 添加加载中的消息
     isLoading.value = true;
     messages.value.push({
@@ -358,6 +366,23 @@ const sendMessage = async () => {
     scrollToBottom();
 
     console.log('\n=== 调用 /v1/conversation/completion 接口 ===');
+    console.log('当前 conversation_id:', conversation_id.value);
+    console.log('当前 message_history 长度:', message_history.value.length);
+    console.log('当前 message_history 内容:', JSON.stringify(message_history.value, null, 2));
+    
+    // 检查消息历史是否为空
+    if (!message_history.value || message_history.value.length === 0) {
+      console.error('消息历史为空，无法发送请求');
+      throw new Error('消息历史为空，请刷新页面重试');
+    }
+    
+    // 额外检查：确保至少有一条用户消息
+    const hasUserMessage = message_history.value.some(msg => msg.role === 'user');
+    if (!hasUserMessage) {
+      console.error('消息历史中没有用户消息');
+      throw new Error('消息历史格式错误，请刷新页面重试');
+    }
+    
     const CompletionData = {
       conversation_id: conversation_id.value,
       messages: message_history.value,
@@ -492,9 +517,19 @@ const sendMessage = async () => {
     const isAbortError = error.name === 'AbortError';
     if (!isAbortError) {
       console.error('发送消息失败:', error);
+      console.error('错误详情:', {
+        message: error.message,
+        stack: error.stack,
+        conversation_id: conversation_id.value,
+        message_history_length: message_history.value.length
+      });
+      
       // 更新最后一条消息为错误信息
       if (messages.value.length > 0) {
-        messages.value[messages.value.length - 1].content = '抱歉，发生了错误，请稍后重试。';
+        const errorMessage = error.message.includes('消息历史为空') 
+          ? '对话初始化失败，请刷新页面重试。' 
+          : '抱歉，发生了错误，请稍后重试。';
+        messages.value[messages.value.length - 1].content = errorMessage;
       }
     } else {
       console.log('请求被取消');
@@ -584,51 +619,74 @@ const handleDocumentClick = (event) => {
   }
 };
 
+// 处理文件点击事件，打开文件预览
+const handleFileClick = (file) => {
+  selectedFile.value = file;
+  filePreviewVisible.value = true;
+};
+
+// 关闭文件预览
+const closeFilePreview = () => {
+  filePreviewVisible.value = false;
+  selectedFile.value = null;
+};
+
+// 获取文件类型
+const getFileType = (fileName) => {
+  if (!fileName) return '';
+  const lowerCaseFileName = fileName.toLowerCase();
+  if (lowerCaseFileName.endsWith('.pdf')) return 'pdf';
+  if (lowerCaseFileName.endsWith('.docx')) return 'docx';
+  if (lowerCaseFileName.endsWith('.doc')) return 'doc';
+  if (lowerCaseFileName.endsWith('.xls') || lowerCaseFileName.endsWith('.xlsx')) return 'excel';
+  if (lowerCaseFileName.endsWith('.ppt') || lowerCaseFileName.endsWith('.pptx')) return 'ppt';
+  if (lowerCaseFileName.endsWith('.txt')) return 'txt';
+  if (lowerCaseFileName.endsWith('.md')) return 'markdown';
+  return '';
+};
+
 // 关闭引用弹出框
 const closeReferencePopup = () => {
   referencePopup.value.visible = false;
 };
 
+// 组件挂载时初始化
 onMounted(async () => {
-  // 直接进行登录
-  await login();
-
-  // 确保已经登录且获取到kb_ids
-  if (authToken.value && kb_ids.value.length > 0) {
-    const createdDialogId = await createDialog(kb_ids.value);
-    if (createdDialogId) {
-      const createdConversationId = await createConversation(createdDialogId);
-      if (createdConversationId) {
-        if (route.query.initialMessage) {
-          inputMessage.value = route.query.initialMessage;
-          sendMessage();
-        } else {
-          // 如果没有初始消息，并且成功创建了会话，显示欢迎消息
-          messages.value.push({
-            type: 'ai',
-            content: '你好！我是AI助手，有什么我可以帮你的吗？',
-            time: new Date().toLocaleTimeString()
-          });
-        }
-      }
+  try {
+    await login();
+    
+    // 从路由参数获取选中的知识库ID
+    const selectedKbId = route.query.selectedKbId;
+    if (selectedKbId) {
+      kb_ids.value = [selectedKbId];
+      console.log('使用选中的知识库:', selectedKbId);
+    } else {
+      console.error('未找到知识库ID，无法创建对话');
+      messages.value.push({
+        type: 'ai',
+        content: '未选择知识库，请返回主页面选择知识库后重试。',
+        time: new Date().toLocaleTimeString()
+      });
+      return;
     }
-  } else if (!authToken.value) {
+    
+    // 检查是否有初始消息，如果有则发送
+    const initialMessage = route.query.initialMessage;
+    if (initialMessage) {
+      inputMessage.value = initialMessage;
+      await sendMessage();
+    }
+    
+    // 添加点击页面其他地方关闭弹出框的事件监听
+    document.addEventListener('click', handleDocumentClick);
+  } catch (error) {
+    console.error('初始化失败:', error);
     messages.value.push({
       type: 'ai',
-      content: '登录失败，无法开始对话。',
-      time: new Date().toLocaleTimeString()
-    });
-  } else if (kb_ids.value.length === 0) {
-    messages.value.push({
-      type: 'ai',
-      content: '未找到可用的知识库，无法开始对话。',
+      content: '初始化失败，请刷新页面重试。',
       time: new Date().toLocaleTimeString()
     });
   }
-  scrollToBottom();
-
-  // 添加点击页面其他地方关闭弹出框的事件监听
-  document.addEventListener('click', handleDocumentClick);
 });
 
 // 组件卸载时取消请求
@@ -646,7 +704,6 @@ onUnmounted(() => {
 .chat-container {
   display: flex;
   flex-direction: column;
-  background-color: #f5f7fa;
   height: 100%;
 }
 

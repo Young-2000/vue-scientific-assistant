@@ -2,6 +2,8 @@ import requests
 from sseclient import SSEClient
 import json
 import uuid
+import base64
+import os
 from datetime import datetime
 
 # 基本配置
@@ -219,7 +221,75 @@ def retrieval_test(question, kb_ids):
     print_to_both(
         f"retrieval_test 返回:\n{json.dumps(result, ensure_ascii=False, indent=2)}"
     )
+    
+    # 添加文件预览测试
+    if result.get("code") == 0 and result.get("data", {}).get("chunks"):
+        chunks = result["data"]["chunks"]
+        for chunk in chunks:
+            doc_id = chunk.get("doc_id")
+            docnm_kwd = chunk.get("docnm_kwd")
+            
+            if doc_id and docnm_kwd:
+                print_to_both(f"\n开始下载文件预览: {docnm_kwd}")
+                download_file_preview(doc_id, docnm_kwd)
+    
     return result
+
+
+def download_file_preview(doc_id, filename):
+    """下载文件预览"""
+    try:
+        # 构建文件预览请求URL
+        file_preview_url = f"{BASE_URL}/document/get/{doc_id}"
+        
+        # 发送GET请求获取文件内容
+        response = session.get(file_preview_url)
+        
+        if response.status_code == 200:
+            try:
+                # 尝试解析JSON响应
+                result = response.json()
+                if result.get("code") == 0:
+                    # 获取base64编码的文件内容
+                    file_content_base64 = result.get("data", {}).get("content")
+                    if file_content_base64:
+                        # 解码base64内容
+                        file_content = base64.b64decode(file_content_base64)
+                        save_file_content(file_content, filename)
+                    else:
+                        print_to_both(f"文件内容为空: {filename}")
+                else:
+                    print_to_both(f"文件预览请求失败: {result.get('message', '未知错误')}")
+            except json.JSONDecodeError:
+                # 如果不是JSON响应，直接保存响应内容
+                file_content = response.content
+                save_file_content(file_content, filename)
+        else:
+            print_to_both(f"文件预览请求失败，状态码: {response.status_code}")
+            
+    except Exception as e:
+        print_to_both(f"下载文件预览时发生错误: {e}")
+
+
+def save_file_content(file_content, filename):
+    """保存文件内容到本地"""
+    try:
+        # 创建预览文件夹
+        preview_dir = "file_previews"
+        if not os.path.exists(preview_dir):
+            os.makedirs(preview_dir)
+        
+        # 处理文件名，移除特殊字符
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+        file_path = os.path.join(preview_dir, safe_filename)
+        
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+        
+        print_to_both(f"文件预览下载成功: {file_path}")
+        print_to_both(f"文件大小: {len(file_content)} 字节")
+    except Exception as e:
+        print_to_both(f"保存文件时发生错误: {e}")
 
 
 def related_questions(question):
@@ -239,7 +309,7 @@ if __name__ == "__main__":
 
     if login(email, password):
         kb_ids = get_kb_ids()
-        question = "多模态大模型是什么"
+        question = "多模态"
 
         # 完整对话流式流程
         # dialog_id = create_dialog(kb_ids)

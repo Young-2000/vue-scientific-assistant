@@ -16,17 +16,13 @@
           >
             <div class="reference-text" v-if="reference.content" v-html="processHighlight(reference.content)">
             </div>
-            
-            <!-- 直接显示文档信息 -->
-            <div v-if="reference.document_name" class="document-info">
-              <div class="document-name">
-                <el-icon><Document /></el-icon>
-                <span>{{ reference.document_name }}</span>
-              </div>
-            </div>
           </div>
         </div>
-        <FileDisplay v-if="files && files.length > 0" :files="files" />
+        <FileDisplay 
+          v-if="files && files.length > 0" 
+          :files="files" 
+          @file-click="handleFileClick"
+        />
       </template>
       <div v-else class="no-references">
         <p>暂无引用内容</p>
@@ -37,7 +33,6 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Document } from '@element-plus/icons-vue';
 import FileDisplay from './FileDisplay.vue';
 
 // 定义组件属性
@@ -95,7 +90,12 @@ const handleScroll = () => {
 
 // 定义emit
 // eslint-disable-next-line no-undef
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'file-click']);
+
+// 处理文件点击
+const handleFileClick = (file) => {
+  emit('file-click', file);
+};
 
 // 组件挂载时添加滚动监听
 onMounted(() => {
@@ -195,27 +195,6 @@ onUnmounted(() => {
   padding: 4px 8px;
   font-size: 12px;
   max-width: 150px;
-}
-
-/* 文档信息样式 */
-.document-info {
-  margin-top: 8px;
-  padding: 8px;
-  background-color: #f0f7ff;
-  border-radius: 4px;
-  border: 1px solid #d1e7ff;
-}
-
-.document-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #409EFF;
-}
-
-.document-name .el-icon {
-  font-size: 14px;
 }
 
 .no-references {

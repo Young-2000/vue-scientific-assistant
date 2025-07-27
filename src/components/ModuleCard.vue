@@ -33,12 +33,22 @@ const props = defineProps({
   icon: {
     type: Object,
     default: null
+  },
+  route: {
+    type: String,
+    default: ''
   }
 });
 
 // 处理卡片点击事件
 const handleCardClick = () => {
-  // 根据不同的模块生成相应的初始消息
+  // 如果有指定的路由，直接跳转到对应页面
+  if (props.route) {
+    router.push(props.route);
+    return;
+  }
+  
+  // 如果没有指定路由，使用原来的聊天界面逻辑（作为备用）
   let initialMessage = '';
   
   switch (props.title) {
@@ -48,23 +58,8 @@ const handleCardClick = () => {
     case '报告生成':
       initialMessage = '请帮我生成一份深度研究报告，需要精准分析。';
       break;
-    case '政策问答':
-      initialMessage = '请帮我解读相关政策，理解政策内容。';
-      break;
-    case '文献研读':
-      initialMessage = '请帮我研读文献，提炼大纲，总结摘要。';
-      break;
-    case '智能配音':
-      initialMessage = '请帮我为文字进行智能配音，赋予声音。';
-      break;
-    case 'PPT生成':
-      initialMessage = '请帮我生成PPT内容，打造精彩的演讲材料。';
-      break;
-    case '翻译对比':
-      initialMessage = '请帮我进行翻译对比，实现双语阅读和对照理解。';
-      break;
-    case '总结汇报':
-      initialMessage = '请帮我总结汇报，凝练工作成效。';
+    case 'OCR识别':
+      initialMessage = '请帮我进行OCR文字识别。';
       break;
     default:
       initialMessage = `请帮我使用${props.title}功能：${props.description}`;

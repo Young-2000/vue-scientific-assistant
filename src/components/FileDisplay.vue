@@ -1,7 +1,12 @@
 <template>
   <div class="file-display">
     <div class="file-list">
-      <div v-for="(file, index) in files" :key="index" class="file-item">
+      <div 
+        v-for="(file, index) in files" 
+        :key="index" 
+        class="file-item"
+        @click="handleFileClick(file)"
+      >
         <div class="file-icon">
           <el-icon><Document /></el-icon>
         </div>
@@ -16,14 +21,41 @@ import { Document } from '@element-plus/icons-vue';
 
 export default {
   name: 'FileDisplay',
+  components: {
+    Document
+  },
   props: {
     files: {
       type: Array,
       default: () => []
     }
   },
-  components: {
-    Document
+  emits: ['file-click'],
+  setup(props, { emit }) {
+    // 处理文件点击
+    const handleFileClick = (file) => {
+      emit('file-click', file);
+    };
+
+    // 根据文件名获取文件类型
+    const getFileType = (fileName) => {
+      if (!fileName) return '';
+      
+      const extension = fileName.split('.').pop()?.toLowerCase();
+      const typeMap = {
+        'docx': 'docx',
+        'doc': 'doc',
+        'pdf': 'pdf',
+        'txt': 'txt'
+      };
+      
+      return typeMap[extension] || '';
+    };
+
+    return {
+      handleFileClick,
+      getFileType
+    };
   }
 };
 </script>
