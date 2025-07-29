@@ -132,10 +132,7 @@ const loadKnowledgeBases = async () => {
   kbError.value = '';
   
   try {
-    // 确保已登录
     const token = await login();
-    
-    // 获取知识库列表
     const response = await fetch('http://127.0.0.1/v1/kb/list', {
       method: 'GET',
       headers: {
@@ -149,17 +146,13 @@ const loadKnowledgeBases = async () => {
     }
     
     const data = await response.json();
-    console.log('知识库列表返回数据:', data);
-    
     if (data.code === 0 && data.data && data.data.kbs) {
       knowledgeBases.value = data.data.kbs.map(kb => ({
         id: kb.id,
         name: kb.name || `知识库 ${kb.id}`
       }));
-      console.log('处理后的知识库列表:', knowledgeBases.value);
     } else {
       knowledgeBases.value = [];
-      console.log('未找到知识库或返回格式不正确');
     }
   } catch (err) {
     console.error('加载知识库失败:', err);

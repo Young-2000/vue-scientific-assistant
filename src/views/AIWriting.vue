@@ -130,27 +130,34 @@ const selectedKbId = ref('');
 const kbLoading = ref(false);
 const kbError = ref('');
 
+// 登录函数
+const login = async () => {
+  const loginData = {
+    email: '123@123.com',
+    password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
+  };
+  const resp = await fetch('http://127.0.0.1/v1/user/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginData)
+  });
+  if (!resp.ok) throw new Error('登录失败');
+  let token = resp.headers.get('Authorization');
+  if (!token) {
+    const body = await resp.json();
+    token = body.data?.access_token;
+  }
+  if (!token) throw new Error('未获取到token');
+  return token;
+};
+
 async function loadKnowledgeBases() {
   kbLoading.value = true;
   kbError.value = '';
   try {
-    // 登录获取token
-    const loginData = {
-      email: '123@123.com',
-      password: 'hXWqKtPnAt+tvQeaKHh87nNc5xbuVJu5thZtH1gBOzFfwmjml8DJp3/E2HzILWJVqWy3Vp79g3wPC67+ImkG1IQyvD4BSYXp4zlUy++toYQO1GOEMys4Xn8Xta2G9KTkjhWrR9qfOyEroIIzXEy2+HBf4DenGXPABLIh0HAGlZSdizpq3mHbIhHm26CDl0OIT7S7xd6YCOYpM9VC6IMYQI/a3r5qZc8cIvkQGrEnrhlPVIPQocxY5shmXwaEJxugPd/kezvsienh6TEfctqVcSwIssIgPBunOVJb2PDCF/NevwS3ZGqmFn7VIxUwHi0oz4KYZsudj+K8aJqG/8Jj8w=='
-    };
-    const resp = await fetch('http://127.0.0.1/v1/user/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginData)
-    });
-    if (!resp.ok) throw new Error('登录失败');
-    let token = resp.headers.get('Authorization');
-    if (!token) {
-      const body = await resp.json();
-      token = body.data?.access_token;
-    }
-    if (!token) throw new Error('未获取到token');
+    // 使用login函数获取token
+    const token = await login();
+    
     // 获取知识库列表
     const response = await fetch('http://127.0.0.1/v1/kb/list', {
       method: 'GET',
@@ -323,12 +330,13 @@ async function requestAIWriting({ type, instruction, article, kbId }) {
   });
   if (!resetResp.ok) throw new Error('reset接口失败');
 
-  // 7. completion（流式处理）
+  // 7. completion（流式处理）- 重新获取token
+  const freshToken = await login();
   const completionResp = await fetch('http://127.0.0.1/v1/canvas/completion', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': token
+      'Authorization': freshToken
     },
     body: JSON.stringify({ id: unique_id })
   });
@@ -355,6 +363,13 @@ async function requestAIWriting({ type, instruction, article, kbId }) {
             if (dataStr === '[DONE]' || !dataStr) continue;
             try {
               const data = JSON.parse(dataStr);
+              
+              // 检查是否有错误
+              if (data.code && data.code !== 0) {
+                console.error('AIWriting completion 流式响应中的错误:', data);
+                throw new Error(data.message || '请求失败');
+              }
+              
               // 只有当answer存在且running_status不为true时才展示
               if (data.data && data.data.answer && data.data.running_status !== true) {
                 console.log('AIWriting completion 返回内容:', data.data);
@@ -362,6 +377,15 @@ async function requestAIWriting({ type, instruction, article, kbId }) {
                 finalAnswer = data.data.answer;
               }
             } catch (e) {
+              // 检查原始数据中是否包含错误信息
+              if (dataStr.includes('"code":401') || dataStr.includes('Unauthorized')) {
+                throw new Error('认证失败，请重新登录');
+              } else if (dataStr.includes('"code":500') || dataStr.includes('Internal Server Error')) {
+                throw new Error('服务器内部错误');
+              } else if (dataStr.includes('"code":404') || dataStr.includes('Not Found')) {
+                throw new Error('请求的资源不存在');
+              }
+              
               // 不是完整JSON，拼回buffer，等下次
               buffer = line + '\n' + buffer;
               break;

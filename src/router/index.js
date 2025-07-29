@@ -4,6 +4,7 @@ import ReportGeneration from '@/views/ReportGeneration.vue'
 import ReportResult from '@/views/ReportResult.vue'
 import KnowledgeQA from '@/views/KnowledgeQA.vue'
 import KnowledgeQAResult from '@/views/KnowledgeQAResult.vue'
+import KnowledgeManagement from '@/views/KnowledgeManagement.vue'
 import OCRRecognition from '@/views/OCRRecognition.vue'
 import ChatInterface from '../components/ChatInterface.vue'
 import AIWriting from '@/views/AIWriting.vue'
@@ -20,6 +21,7 @@ const routes = [
     component: KnowledgeQAResult,
     props: (route) => ({ question: route.query.question })
   },
+  { path: '/knowledge-management', name: '知识库管理', component: KnowledgeManagement },
   { path: '/ocr', name: 'OCR识别', component: OCRRecognition },
   { path: '/ai-writing', name: 'AI写作', component: AIWriting },
   {

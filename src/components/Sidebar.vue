@@ -19,6 +19,7 @@
       <el-menu-item index="/search">智能搜索</el-menu-item>
       <el-menu-item index="/report">报告生成</el-menu-item>
       <el-menu-item index="/knowledge-qa">知识库问答</el-menu-item>
+      <el-menu-item index="/knowledge-management">知识库管理</el-menu-item>
       <el-menu-item index="/ocr">OCR识别</el-menu-item>
       <el-menu-item index="/ai-writing">AI写作</el-menu-item>
     </el-menu>

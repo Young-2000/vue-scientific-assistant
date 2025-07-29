@@ -358,12 +358,13 @@ async function handleSubmit() {
       })
       if (!resetResp.ok) throw new Error('reset接口失败')
 
-      // 5. completion
+      // 5. completion - 重新获取token
+      const freshToken = await login();
       const completionResp = await fetch('http://127.0.0.1/v1/canvas/completion', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken.value
+          'Authorization': freshToken
         },
         body: JSON.stringify({ id: unique_id })
       })
@@ -395,6 +396,13 @@ async function handleSubmit() {
             if (dataStr === '[DONE]' || !dataStr) continue
             try {
               const data = JSON.parse(dataStr)
+              
+              // 检查是否有错误
+              if (data.code && data.code !== 0) {
+                console.error('ReportGeneration completion 流式响应中的错误:', data);
+                throw new Error(data.message || '请求失败');
+              }
+              
               if (data.data) {
                 if (data.data.answer) {
                   answer = data.data.answer
@@ -402,6 +410,15 @@ async function handleSubmit() {
                 }
               }
             } catch (e) {
+              // 检查原始数据中是否包含错误信息
+              if (dataStr.includes('"code":401') || dataStr.includes('Unauthorized')) {
+                throw new Error('认证失败，请重新登录');
+              } else if (dataStr.includes('"code":500') || dataStr.includes('Internal Server Error')) {
+                throw new Error('服务器内部错误');
+              } else if (dataStr.includes('"code":404') || dataStr.includes('Not Found')) {
+                throw new Error('请求的资源不存在');
+              }
+              
               console.log('JSON parse error:', e, dataStr)
               answer = "生成失败，请重试"
               // 解析失败，可能是数据还没收全，留到下次

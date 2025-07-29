@@ -383,6 +383,10 @@ const sendMessage = async () => {
       throw new Error('消息历史格式错误，请刷新页面重试');
     }
     
+    // 每次调用completion接口前都重新获取token
+    console.log('重新获取token...');
+    await login();
+    
     const CompletionData = {
       conversation_id: conversation_id.value,
       messages: message_history.value,
@@ -401,7 +405,19 @@ const sendMessage = async () => {
       console.error('completion 请求失败，状态码:', response.status);
       const errorText = await response.text();
       console.error('completion 响应内容:', errorText);
-      throw new Error('请求失败');
+      
+      let errorMessage = '请求失败';
+      if (response.status === 401) {
+        errorMessage = '认证失败，请重新登录';
+      } else if (response.status === 500) {
+        errorMessage = '服务器内部错误';
+      } else if (response.status === 404) {
+        errorMessage = '服务不可用';
+      } else if (response.status === 400) {
+        errorMessage = '请求参数错误';
+      }
+      
+      throw new Error(`${errorMessage} (状态码: ${response.status})`);
     }
 
     // 处理流式响应
@@ -412,6 +428,7 @@ const sendMessage = async () => {
     let isThinking = false; // 添加思考状态标记
     let references = []; // 存储引用数据
     let files = []; // 存储文件数据
+    let hasReceivedValidData = false; // 标记是否收到有效数据
 
     console.log('开始接收流式响应...');
 
@@ -440,6 +457,12 @@ const sendMessage = async () => {
             const data = JSON.parse(dataStr);
             console.log('解析后的数据:', data);
             
+            // 检查是否有错误
+            if (data.code && data.code !== 0) {
+              console.error('流式响应中的错误:', data);
+              throw new Error(data.message || '请求失败');
+            }
+            
             if (data.data && data.data.answer) {
               const currentAnswerChunk = data.data.answer;
 
@@ -458,6 +481,7 @@ const sendMessage = async () => {
               }
 
               console.log('收到最新回答:', answerContent);
+              hasReceivedValidData = true;
               
               latestAiMessage.value = messages.value[aiMessageIndex];
               scrollToBottom();
@@ -495,6 +519,15 @@ const sendMessage = async () => {
           } catch (e) {
             console.error('JSON解析失败:', e);
             console.error('原始数据:', dataStr);
+            
+            // 如果解析失败且包含错误信息，抛出错误
+            if (dataStr.includes('"code":401') || dataStr.includes('Unauthorized')) {
+              throw new Error('认证失败，请重新登录');
+            } else if (dataStr.includes('"code":500') || dataStr.includes('Internal Server Error')) {
+              throw new Error('服务器内部错误');
+            } else if (dataStr.includes('"code":404') || dataStr.includes('Not Found')) {
+              throw new Error('请求的资源不存在');
+            }
           }
         }
       }
@@ -511,6 +544,15 @@ const sendMessage = async () => {
     }
 
     console.log('流式响应处理完成');
+    
+    // 如果没有收到任何有效数据，显示错误
+    if (!hasReceivedValidData) {
+      console.log('未收到有效数据，显示错误');
+      if (messages.value.length > 0) {
+        messages.value[messages.value.length - 1].content = '未收到有效响应，请重试';
+      }
+      return;
+    }
 
   } catch (error) {
     // 修复后代码
@@ -526,9 +568,24 @@ const sendMessage = async () => {
       
       // 更新最后一条消息为错误信息
       if (messages.value.length > 0) {
-        const errorMessage = error.message.includes('消息历史为空') 
-          ? '对话初始化失败，请刷新页面重试。' 
-          : '抱歉，发生了错误，请稍后重试。';
+        let errorMessage = '抱歉，发生了错误，请稍后重试。';
+        
+        if (error.message.includes('消息历史为空')) {
+          errorMessage = '对话初始化失败，请刷新页面重试。';
+        } else if (error.message.includes('认证失败') || error.message.includes('401') || error.message.includes('Unauthorized')) {
+          errorMessage = '认证失败，正在重新登录...';
+        } else if (error.message.includes('服务器内部错误') || error.message.includes('500')) {
+          errorMessage = '服务器内部错误，请稍后重试。';
+        } else if (error.message.includes('网络连接失败') || error.message.includes('NetworkError')) {
+          errorMessage = '网络连接失败，请检查网络连接后重试。';
+        } else if (error.message.includes('请求超时') || error.message.includes('timeout')) {
+          errorMessage = '请求超时，请稍后重试。';
+        } else if (error.message.includes('请求的资源不存在') || error.message.includes('404')) {
+          errorMessage = '请求的资源不存在，请检查问题内容。';
+        } else {
+          errorMessage = `生成失败：${error.message}`;
+        }
+        
         messages.value[messages.value.length - 1].content = errorMessage;
       }
     } else {

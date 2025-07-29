@@ -127,11 +127,49 @@
               <el-icon class="error-icon"><Warning /></el-icon>
             </div>
             <h3>搜索失败</h3>
-            <p>{{ errorMessage }}</p>
-            <el-button type="primary" class="retry-button" @click="retrySearch">
-              <el-icon class="retry-icon"><Refresh /></el-icon>
-              重试搜索
-            </el-button>
+            <p class="error-message">{{ errorMessage }}</p>
+            
+            <!-- 根据错误类型显示不同的解决建议 -->
+            <div class="error-suggestions" v-if="errorMessage">
+              <h4>可能的解决方案：</h4>
+              <ul v-if="errorMessage.includes('网络连接失败')">
+                <li>检查网络连接是否正常</li>
+                <li>尝试刷新页面</li>
+                <li>检查防火墙设置</li>
+              </ul>
+              <ul v-else-if="errorMessage.includes('认证失败')">
+                <li>系统正在自动重新登录</li>
+                <li>如果问题持续，请刷新页面</li>
+              </ul>
+              <ul v-else-if="errorMessage.includes('服务器内部错误')">
+                <li>服务器暂时不可用，请稍后重试</li>
+                <li>如果问题持续，请联系管理员</li>
+              </ul>
+              <ul v-else-if="errorMessage.includes('请求超时')">
+                <li>网络响应较慢，请稍后重试</li>
+                <li>尝试简化问题内容</li>
+              </ul>
+              <ul v-else-if="errorMessage.includes('知识库')">
+                <li>检查知识库是否存在</li>
+                <li>确认知识库权限设置</li>
+                <li>尝试重新选择知识库</li>
+              </ul>
+              <ul v-else>
+                <li>请稍后重试</li>
+                <li>如果问题持续，请联系技术支持</li>
+              </ul>
+            </div>
+            
+            <div class="error-actions">
+              <el-button type="primary" class="retry-button" @click="retrySearch">
+                <el-icon class="retry-icon"><Refresh /></el-icon>
+                重试搜索
+              </el-button>
+              <el-button @click="goBack" class="back-button">
+                <el-icon><ArrowLeft /></el-icon>
+                返回搜索
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -171,6 +209,7 @@ import {
   QuestionFilled, 
   View, 
   ArrowRight, 
+  ArrowLeft,
   Refresh
 } from '@element-plus/icons-vue';
 import { marked } from 'marked';
@@ -242,7 +281,19 @@ const login = async () => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('登录失败，响应内容:', errorText);
-      throw new Error('登录失败');
+      
+      let errorMessage = '登录失败';
+      if (response.status === 401) {
+        errorMessage = '用户名或密码错误';
+      } else if (response.status === 500) {
+        errorMessage = '服务器内部错误';
+      } else if (response.status === 503) {
+        errorMessage = '服务暂时不可用';
+      } else if (response.status === 400) {
+        errorMessage = '登录参数错误';
+      }
+      
+      throw new Error(`${errorMessage} (状态码: ${response.status})`);
     }
 
     const token = response.headers.get('Authorization');
@@ -272,7 +323,19 @@ const login = async () => {
     if (!kbResponse.ok) {
       const errorText = await kbResponse.text();
       console.error('获取知识库列表失败，响应内容:', errorText);
-      throw new Error('获取知识库列表失败');
+      
+      let errorMessage = '获取知识库列表失败';
+      if (kbResponse.status === 401) {
+        errorMessage = '认证失败，请重新登录';
+      } else if (kbResponse.status === 500) {
+        errorMessage = '服务器内部错误';
+      } else if (kbResponse.status === 404) {
+        errorMessage = '知识库服务不可用';
+      } else if (kbResponse.status === 403) {
+        errorMessage = '没有权限访问知识库';
+      }
+      
+      throw new Error(`${errorMessage} (状态码: ${kbResponse.status})`);
     }
 
     const kbData = await kbResponse.json();
@@ -335,6 +398,11 @@ const retrySearch = () => {
   performSearch();
 };
 
+// 返回搜索页面
+const goBack = () => {
+  router.push('/knowledge-qa');
+};
+
 // 发送ask流式请求
 const sendAskStream = async () => {
   if (!question.value.trim()) return;
@@ -364,12 +432,26 @@ const sendAskStream = async () => {
 
     console.log('发送数据:', askData);
 
-    const response = await fetch('http://127.0.0.1/v1/conversation/ask', {
+    let response = await fetch('http://127.0.0.1/v1/conversation/ask', {
       method: 'POST',
       headers: headers.value,
       body: JSON.stringify(askData),
       signal: controller.value.signal
     });
+
+    // 如果返回401错误，重新登录并重试
+    if (response.status === 401) {
+      console.log('Token过期，重新登录...');
+      await login(); // 重新获取token
+      
+      // 使用新的token重试请求
+      response = await fetch('http://127.0.0.1/v1/conversation/ask', {
+        method: 'POST',
+        headers: headers.value,
+        body: JSON.stringify(askData),
+        signal: controller.value.signal
+      });
+    }
 
     if (!response.ok) {
       console.error('ask 请求失败，状态码:', response.status);
@@ -385,6 +467,7 @@ const sendAskStream = async () => {
     let isThinking = false; // 添加思考状态标记
     let references = []; // 存储引用数据
     let buffer = ""; // 添加缓冲区来处理不完整的数据
+    let hasReceivedValidData = false; // 标记是否收到有效数据
 
     console.log('开始接收流式响应...');
 
@@ -417,6 +500,12 @@ const sendAskStream = async () => {
             const data = JSON.parse(dataStr);
             console.log('解析后的数据:', data);
             
+            // 检查是否有错误
+            if (data.code && data.code !== 0) {
+              console.error('流式响应中的错误:', data);
+              throw new Error(data.message || '请求失败');
+            }
+            
             if (data.data && data.data.answer) {
               const currentAnswerChunk = data.data.answer;
 
@@ -435,6 +524,7 @@ const sendAskStream = async () => {
               }
 
               console.log('收到最新回答:', answerContent);
+              hasReceivedValidData = true;
               isLoading.value = false;
               hasResults.value = true;
             }
@@ -478,6 +568,15 @@ const sendAskStream = async () => {
             console.error('JSON解析失败:', e);
             console.error('原始数据:', dataStr);
             console.error('当前缓冲区:', buffer);
+            
+            // 如果解析失败且包含错误信息，抛出错误
+            if (dataStr.includes('"code":401') || dataStr.includes('Unauthorized')) {
+              throw new Error('认证失败，请重新登录');
+            } else if (dataStr.includes('"code":500') || dataStr.includes('Internal Server Error')) {
+              throw new Error('服务器内部错误');
+            } else if (dataStr.includes('"code":404') || dataStr.includes('Not Found')) {
+              throw new Error('请求的资源不存在');
+            }
             // 继续处理，不中断流程
           }
         }
@@ -496,29 +595,81 @@ const sendAskStream = async () => {
           try {
             const data = JSON.parse(dataStr);
             console.log('解析剩余数据:', data);
+            
+            // 检查剩余数据中是否有错误
+            if (data.code && data.code !== 0) {
+              console.error('剩余数据中的错误:', data);
+              throw new Error(data.message || '请求失败');
+            }
             // 处理剩余数据...
           } catch (e) {
             console.error('解析剩余数据失败:', e);
+            
+            // 如果解析失败且包含错误信息，抛出错误
+            if (dataStr.includes('"code":401') || dataStr.includes('Unauthorized')) {
+              throw new Error('认证失败，请重新登录');
+            } else if (dataStr.includes('"code":500') || dataStr.includes('Internal Server Error')) {
+              throw new Error('服务器内部错误');
+            } else if (dataStr.includes('"code":404') || dataStr.includes('Not Found')) {
+              throw new Error('请求的资源不存在');
+            }
           }
         }
       }
     }
 
     console.log('流式响应处理完成');
+    
+    // 如果没有收到任何有效数据，显示错误
+    if (!hasReceivedValidData) {
+      console.log('未收到有效数据，显示错误');
+      hasError.value = true;
+      errorMessage.value = '未收到有效响应，请重试';
+      isLoading.value = false;
+      mainAnswer.value = '';
+      hasResults.value = false;
+      return;
+    }
 
   } catch (error) {
     // 修复后代码
     const isAbortError = error.name === 'AbortError';
     if (!isAbortError) {
       console.error('发送消息失败:', error);
+      
+      // 根据错误类型提供更详细的错误信息
+      let detailedErrorMessage = '抱歉，发生了错误，请稍后重试。';
+      
+      if (error.message) {
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          detailedErrorMessage = '网络连接失败，请检查网络连接后重试。';
+        } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+          detailedErrorMessage = '请求超时，请稍后重试。';
+        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+          detailedErrorMessage = '认证失败，正在重新登录...';
+        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+          detailedErrorMessage = '服务器内部错误，请稍后重试。';
+        } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+          detailedErrorMessage = '请求的资源不存在，请检查问题内容。';
+        } else {
+          detailedErrorMessage = `生成失败：${error.message}`;
+        }
+      }
+      
       // 更新错误状态
       hasError.value = true;
-      errorMessage.value = '抱歉，发生了错误，请稍后重试。';
+      errorMessage.value = detailedErrorMessage;
       isLoading.value = false;
+      
+      // 清空"正在生成中"的内容
+      mainAnswer.value = '';
+      hasResults.value = false;
     } else {
       console.log('请求被取消');
       // 如果是取消请求，重置状态
       isLoading.value = false;
+      mainAnswer.value = '';
+      hasResults.value = false;
     }
   } finally {
     isLoading.value = false;
@@ -538,18 +689,43 @@ const getRetrievalTest = async () => {
 
     console.log('发送检索测试请求的payload:', payload);
 
-    const response = await fetch('http://127.0.0.1/v1/chunk/retrieval_test', {
+    let response = await fetch('http://127.0.0.1/v1/chunk/retrieval_test', {
       method: 'POST',
       headers: headers.value,
       body: JSON.stringify(payload)
     });
+
+    // 如果返回401错误，重新登录并重试
+    if (response.status === 401) {
+      console.log('Token过期，重新登录...');
+      await login(); // 重新获取token
+      
+      // 使用新的token重试请求
+      response = await fetch('http://127.0.0.1/v1/chunk/retrieval_test', {
+        method: 'POST',
+        headers: headers.value,
+        body: JSON.stringify(payload)
+      });
+    }
 
     console.log('检索测试响应状态码:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('检索测试失败，响应内容:', errorText);
-      throw new Error('检索测试请求失败');
+      
+      let errorMessage = '检索测试请求失败';
+      if (response.status === 401) {
+        errorMessage = '认证失败，请重新登录';
+      } else if (response.status === 500) {
+        errorMessage = '服务器内部错误';
+      } else if (response.status === 404) {
+        errorMessage = '知识库不存在或已被删除';
+      } else if (response.status === 400) {
+        errorMessage = '请求参数错误';
+      }
+      
+      throw new Error(`${errorMessage} (状态码: ${response.status})`);
     }
 
     const result = await response.json();
@@ -613,18 +789,43 @@ const getRelatedQuestions = async () => {
 
     console.log('发送相关问题请求的payload:', payload);
 
-    const response = await fetch('http://127.0.0.1/v1/conversation/related_questions', {
+    let response = await fetch('http://127.0.0.1/v1/conversation/related_questions', {
       method: 'POST',
       headers: headers.value,
       body: JSON.stringify(payload)
     });
+
+    // 如果返回401错误，重新登录并重试
+    if (response.status === 401) {
+      console.log('Token过期，重新登录...');
+      await login(); // 重新获取token
+      
+      // 使用新的token重试请求
+      response = await fetch('http://127.0.0.1/v1/conversation/related_questions', {
+        method: 'POST',
+        headers: headers.value,
+        body: JSON.stringify(payload)
+      });
+    }
 
     console.log('相关问题响应状态码:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('相关问题请求失败，响应内容:', errorText);
-      throw new Error('相关问题请求失败');
+      
+      let errorMessage = '相关问题请求失败';
+      if (response.status === 401) {
+        errorMessage = '认证失败，请重新登录';
+      } else if (response.status === 500) {
+        errorMessage = '服务器内部错误';
+      } else if (response.status === 404) {
+        errorMessage = '服务不可用';
+      } else if (response.status === 400) {
+        errorMessage = '问题格式错误';
+      }
+      
+      throw new Error(`${errorMessage} (状态码: ${response.status})`);
     }
 
     const result = await response.json();
@@ -1721,5 +1922,129 @@ const getFileType = (fileName) => {
 .related-questions {
   max-height: none !important;
   overflow: visible !important;
+}
+
+/* 错误显示样式 */
+.error-section {
+  margin-top: 40px;
+}
+
+.error-card {
+  background: linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%);
+  border: 1px solid #fecaca;
+  border-radius: 16px;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.1);
+}
+
+.error-content {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.error-icon-wrapper {
+  margin-bottom: 20px;
+}
+
+.error-icon {
+  font-size: 48px;
+  color: #ef4444;
+}
+
+.error-card h3 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-bottom: 16px;
+}
+
+.error-message {
+  font-size: 16px;
+  color: #7f1d1d;
+  margin-bottom: 24px;
+  line-height: 1.6;
+  background: rgba(239, 68, 68, 0.05);
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid #ef4444;
+}
+
+.error-suggestions {
+  text-align: left;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+}
+
+.error-suggestions h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-bottom: 12px;
+}
+
+.error-suggestions ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.error-suggestions li {
+  font-size: 14px;
+  color: #7f1d1d;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.retry-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: none;
+  padding: 12px 24px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.retry-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.back-button {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  padding: 12px 24px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.back-button:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+  transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .error-card {
+    padding: 24px 16px;
+  }
+  
+  .error-actions {
+    flex-direction: column;
+  }
+  
+  .error-suggestions {
+    padding: 16px;
+  }
 }
 </style>
