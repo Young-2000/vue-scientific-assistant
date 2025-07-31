@@ -1,560 +1,1033 @@
 <template>
   <div class="ocr-recognition-view">
-    <h2 class="main-title">OCR识别</h2>
-    <p class="subtitle">快速识别图片或PDF中的文字，并将其转换为可编辑、可检索的文本格式</p>
+    <!-- 文件上传区域 -->
+    <div class="upload-section">
+      <div class="upload-container">
+        <div class="upload-header">
+          <h1>OCR文字识别</h1>
+          <p>支持图片和PDF文件的文字识别，快速提取文档内容</p>
+        </div>
 
-    <div class="ocr-container">
-      <!-- 左侧上传区域 -->
-      <div class="upload-panel">
-        <h3>上传文件</h3>
-        <div class="upload-area">
-          <el-upload
-            class="upload-demo"
-            drag
-            action="#"
-            :auto-upload="false"
-            :on-change="handleFileChange"
-            :on-remove="handleFileRemove"
-            :file-list="fileList"
-            :limit="5"
-            multiple
-          >
-            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-            <div class="el-upload__text">
-              拖拽文件到此处或 <em>点击上传</em>
+        <div class="upload-content">
+          <div class="upload-area">
+            <el-upload
+              v-model:file-list="fileList"
+              class="upload-dragger"
+              drag
+              :auto-upload="false"
+              :on-change="handleFileChange"
+              :on-remove="handleFileRemove"
+              accept=".jpg,.jpeg,.png,.pdf"
+              :limit="1"
+              :show-file-list="false"
+            >
+              <div class="upload-inner">
+                <el-icon class="upload-icon"><UploadFilled /></el-icon>
+                <div class="upload-text">
+                  <h3>点击或拖拽文件到此区域</h3>
+                  <p>支持 JPG、PNG、PDF 格式，单个文件最大 10MB</p>
+                </div>
+              </div>
+            </el-upload>
+
+            <!-- 文件信息 -->
+            <div v-if="fileList.length > 0" class="file-info">
+              <div class="file-card">
+                <div class="file-header">
+                  <div class="file-basic-info">
+                    <el-icon class="file-type-icon">
+                      <Document v-if="fileList[0].raw?.type === 'application/pdf'" />
+                      <Picture v-else />
+                    </el-icon>
+                    <div class="file-details">
+                      <h4>{{ fileList[0].name }}</h4>
+                      <p>{{ formatFileSize(fileList[0].size || fileList[0].raw?.size) }}</p>
+                    </div>
+                  </div>
+                  <el-button size="small" type="danger" @click="clearFile" circle>
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
             </div>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持JPG/PNG/PDF等格式，单个文件不超过10MB
-              </div>
-            </template>
-          </el-upload>
-        </div>
-
-        <div class="file-list" v-if="fileList.length > 0">
-          <h4>待处理文件 ({{ fileList.length }})</h4>
-          <el-table :data="fileList" style="width: 100%">
-            <el-table-column prop="name" label="文件名" />
-            <el-table-column prop="size" label="大小" width="100">
-              <template #default="scope">
-                {{ formatFileSize(scope.row.size) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button 
-                  link 
-                  type="primary" 
-                  size="small"
-                  @click="showPreview(scope.row)"
-                >
-                  预览
-                </el-button>
-                <el-button 
-                  link 
-                  type="danger" 
-                  size="small"
-                  @click="removeFile(scope.row)"
-                >
-                  删除
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <div class="action-buttons">
-          <el-button 
-            type="primary" 
-            :disabled="fileList.length === 0" 
-            @click="processFiles"
-          >
-            开始识别
-          </el-button>
-          <el-button 
-            type="danger" 
-            :disabled="fileList.length === 0" 
-            @click="clearFiles"
-          >
-            清空文件
-          </el-button>
-        </div>
-
-        <!-- OCR设置 -->
-        <div class="ocr-settings">
-          <h4>OCR设置</h4>
-          <el-form label-position="top">
-            <el-form-item label="识别语言">
-              <el-select v-model="ocrSettings.language" placeholder="选择识别语言">
-                <el-option label="中文" value="zh-CN" />
-                <el-option label="英文" value="en-US" />
-                <el-option label="日文" value="ja-JP" />
-                <el-option label="韩文" value="ko-KR" />
-                <el-option label="多语言" value="multi" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="识别模式">
-              <el-radio-group v-model="ocrSettings.mode">
-                <el-radio-button label="text">文本识别</el-radio-button>
-                <el-radio-button label="table">表格识别</el-radio-button>
-                <el-radio-button label="layout">版面分析</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
-            <el-form-item label="高级设置">
-              <el-checkbox v-model="ocrSettings.enhanceImage">图像增强</el-checkbox>
-              <el-checkbox v-model="ocrSettings.autoRotate">自动旋转</el-checkbox>
-            </el-form-item>
-          </el-form>
-        </div>
-      </div>
-
-      <!-- 右侧结果区域 -->
-      <div class="result-panel">
-        <div class="result-header">
-          <h3>识别结果</h3>
-          <div class="result-actions" v-if="ocrResult">
-            <el-tooltip content="复制全部文本" placement="top">
-              <el-button circle @click="copyText">
-                <el-icon><Document /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip content="下载为TXT" placement="top">
-              <el-button circle @click="downloadText('txt')">
-                <el-icon><Download /></el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-dropdown @command="handleExport">
-              <el-button circle>
-                <el-icon><More /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="word">导出为Word</el-dropdown-item>
-                  <el-dropdown-item command="pdf">导出为PDF</el-dropdown-item>
-                  <el-dropdown-item command="excel">导出为Excel</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
           </div>
-        </div>
 
-        <div v-if="isProcessing" class="processing-indicator">
-          <el-progress 
-            type="circle" 
-            :percentage="processingProgress" 
-            :status="processingProgress === 100 ? 'success' : ''"
-          />
-          <p>{{ processingStatus }}</p>
-        </div>
+          <!-- 控制区域 -->
+          <div class="control-area">
+            <div class="settings-card">
+              <h4>识别设置</h4>
+              <div class="setting-item">
+                <label>可视化结果</label>
+                <el-switch v-model="ocrSettings.visualize" />
+              </div>
+            </div>
 
-        <div v-else-if="!ocrResult" class="empty-result">
-          <el-empty description="暂无识别结果" />
-          <p>请上传文件并点击"开始识别"按钮</p>
-        </div>
+            <div class="action-buttons">
+              <el-button
+                type="primary"
+                size="large"
+                :loading="isProcessing"
+                :disabled="fileList.length === 0"
+                @click="startOCR"
+                class="primary-action"
+              >
+                <el-icon v-if="!isProcessing"><DocumentChecked /></el-icon>
+                {{ isProcessing ? '识别中...' : '开始识别' }}
+              </el-button>
 
-        <div v-else class="result-content">
-          <el-tabs v-model="activeResultTab" type="card">
-            <el-tab-pane label="文本视图" name="text">
-              <div class="text-result">
-                <el-input
-                  v-model="ocrResult.text"
-                  type="textarea"
-                  :rows="15"
-                  placeholder="识别结果将显示在这里"
-                />
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="原图对照" name="compare" v-if="ocrResult.imageUrl">
-              <div class="compare-result">
-                <div class="image-container">
-                  <img :src="ocrResult.imageUrl" alt="原图" />
-                </div>
-                <div class="text-container">
-                  <el-input
-                    v-model="ocrResult.text"
-                    type="textarea"
-                    :rows="15"
-                    placeholder="识别结果将显示在这里"
-                  />
-                </div>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="表格视图" name="table" v-if="ocrSettings.mode === 'table' && ocrResult.tableData">
-              <div class="table-result">
-                <el-table :data="ocrResult.tableData" border style="width: 100%">
-                  <el-table-column 
-                    v-for="(col, index) in ocrResult.tableColumns" 
-                    :key="index"
-                    :prop="col.prop"
-                    :label="col.label"
-                  />
-                </el-table>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
+              <el-button
+                size="large"
+                @click="clearAll"
+                :disabled="isProcessing"
+                class="secondary-action"
+              >
+                <el-icon><Delete /></el-icon>
+                清空重置
+              </el-button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 文件预览对话框 -->
-    <el-dialog v-model="previewDialogVisible" title="文件预览" width="70%">
-      <div class="file-preview">
-        <img v-if="previewFile && isImageFile(previewFile)" :src="previewUrl" alt="文件预览" />
-        <iframe v-else-if="previewFile && isPdfFile(previewFile)" :src="previewUrl" width="100%" height="500"></iframe>
-        <div v-else class="preview-not-available">
-          <el-empty description="预览不可用" />
-          <p>此文件类型不支持预览</p>
+    <!-- 识别结果区域 -->
+    <div class="results-section" v-if="isProcessing || ocrResults.length > 0">
+      <div class="results-container">
+        <div class="results-header">
+          <h2>识别结果</h2>
+          <div class="results-actions" v-if="ocrResults.length > 0">
+            <el-button @click="copyAllText">
+              <el-icon><DocumentCopy /></el-icon>
+              复制全部文字
+            </el-button>
+            <el-button @click="downloadResults">
+              <el-icon><Download /></el-icon>
+              下载结果
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 处理中状态 -->
+        <div v-if="isProcessing" class="processing-card">
+          <div class="processing-content">
+            <div class="processing-animation">
+              <el-icon class="rotating"><Loading /></el-icon>
+            </div>
+            <h3>正在识别中...</h3>
+            <p>{{ processingStatus }}</p>
+          </div>
+        </div>
+
+        <!-- 结果展示 - 分页形式 -->
+        <div v-else class="results-content">
+          <div v-if="ocrResults.length > 0" class="pagination-results">
+            <!-- 分页控制器 -->
+            <div class="pagination-controls">
+              <div class="page-info">
+                <span>第 {{ currentPage + 1 }} 页，共 {{ ocrResults.length }} 页</span>
+              </div>
+              <div class="page-buttons">
+                <el-button
+                  :disabled="currentPage === 0"
+                  @click="previousPage"
+                  circle
+                >
+                  <el-icon><ArrowLeft /></el-icon>
+                </el-button>
+                <el-button
+                  :disabled="currentPage === ocrResults.length - 1"
+                  @click="nextPage"
+                  circle
+                >
+                  <el-icon><ArrowRight /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 当前页结果 -->
+            <div class="current-page-result">
+              <div class="result-item">
+                <div class="result-header">
+                  <h3>第 {{ currentPage + 1 }} 页识别结果</h3>
+                  <!-- <div class="result-stats">
+                    <el-tag type="info">{{ currentResult.wordCount }} 字</el-tag>
+                    <el-tag type="success" v-if="currentResult.confidence">
+                      置信度: {{ (currentResult.confidence * 100).toFixed(1) }}%
+                    </el-tag>
+                  </div> -->
+                </div>
+
+                <div class="result-content">
+                  <!-- 图像展示区域 -->
+                  <div class="images-area" v-if="currentResult.images">
+                    <div class="image-card" v-if="currentResult.images.input">
+                      <div class="image-header">
+                        <h4>原始图像</h4>
+                        <el-button size="small" @click="viewFullImage(currentResult.images.input, '原始图像')">
+                          <el-icon><ZoomIn /></el-icon>
+                          查看大图
+                        </el-button>
+                      </div>
+                      <div class="image-container">
+                        <img
+                          :src="'data:image/jpeg;base64,' + currentResult.images.input"
+                          alt="原始图像"
+                          @click="viewFullImage(currentResult.images.input, '原始图像')"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="image-card" v-if="currentResult.images.ocr">
+                      <div class="image-header">
+                        <h4>OCR识别可视化</h4>
+                        <el-button size="small" @click="viewFullImage(currentResult.images.ocr, 'OCR识别可视化')">
+                          <el-icon><ZoomIn /></el-icon>
+                          查看大图
+                        </el-button>
+                      </div>
+                      <div class="image-container">
+                        <img
+                          :src="'data:image/jpeg;base64,' + currentResult.images.ocr"
+                          alt="OCR可视化"
+                          @click="viewFullImage(currentResult.images.ocr, 'OCR识别可视化')"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="image-card" v-if="currentResult.images.preprocessing">
+                      <div class="image-header">
+                        <h4>文档预处理</h4>
+                        <el-button size="small" @click="viewFullImage(currentResult.images.preprocessing, '文档预处理')">
+                          <el-icon><ZoomIn /></el-icon>
+                          查看大图
+                        </el-button>
+                      </div>
+                      <div class="image-container">
+                        <img
+                          :src="'data:image/jpeg;base64,' + currentResult.images.preprocessing"
+                          alt="文档预处理"
+                          @click="viewFullImage(currentResult.images.preprocessing, '文档预处理')"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 文字内容 -->
+                  <div class="text-area">
+                    <div class="text-card">
+                      <div class="text-header">
+                        <h4>识别文字内容</h4>
+                        <el-button size="small" @click="copyPageText(currentResult.text)">
+                          <el-icon><DocumentCopy /></el-icon>
+                          复制文字
+                        </el-button>
+                      </div>
+                      <div class="text-content">
+                        {{ currentResult.text || '暂无识别到文字内容' }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- 图像查看对话框 -->
+    <el-dialog v-model="imageViewDialogVisible" :title="imageViewTitle" width="80%" class="image-view-dialog">
+      <div class="image-view-content">
+        <img
+          v-if="currentViewImage"
+          :src="'data:image/jpeg;base64,' + currentViewImage"
+          alt="图像查看"
+          class="full-image"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="imageViewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadImage">下载图像</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import { UploadFilled, Document, Download, More } from '@element-plus/icons-vue';
+import {
+  UploadFilled,
+  Document,
+  Picture,
+  Delete,
+  DocumentChecked,
+  Download,
+  DocumentCopy,
+  Loading,
+  ZoomIn,
+  ArrowLeft,
+  ArrowRight
+} from '@element-plus/icons-vue';
+
+// API配置
+const API_URL = "http://124.16.71.198:5678/ocr";
 
 // 状态变量
 const fileList = ref([]);
 const ocrSettings = ref({
-  language: 'zh-CN',
-  mode: 'text',
-  enhanceImage: true,
-  autoRotate: true
+  visualize: true
 });
 const isProcessing = ref(false);
-const processingProgress = ref(0);
 const processingStatus = ref('');
-const ocrResult = ref(null);
-const activeResultTab = ref('text');
-const previewDialogVisible = ref(false);
-const previewFile = ref(null);
-const previewUrl = ref('');
+const ocrResults = ref([]);
 
-// 处理文件变化
-const handleFileChange = (file) => {
-  // 检查文件类型
-  const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-  if (!allowedTypes.includes(file.raw.type)) {
-    ElMessage.error('只支持JPG、PNG和PDF格式文件');
-    return false;
+// 分页相关变量
+const currentPage = ref(0);
+
+// 图像查看相关变量
+const imageViewDialogVisible = ref(false);
+const currentViewImage = ref('');
+const imageViewTitle = ref('');
+
+// 计算属性：当前页结果
+const currentResult = computed(() => {
+  if (ocrResults.value.length > 0 && currentPage.value < ocrResults.value.length) {
+    return ocrResults.value[currentPage.value];
   }
-  
-  // 检查文件大小
-  const maxSize = 10 * 1024 * 1024; // 10MB
-  if (file.size > maxSize) {
-    ElMessage.error('文件大小不能超过10MB');
-    return false;
-  }
-  
-  ElMessage.success(`文件 ${file.name} 已添加`);
-  return true;
-};
+  return {
+    text: '',
+    wordCount: 0,
+    confidence: 0,
+    images: {}
+  };
+});
 
-// 移除文件
-const handleFileRemove = (file) => {
-  ElMessage.info(`文件 ${file.name} 已移除`);
-};
-
-const removeFile = (file) => {
-  const index = fileList.value.indexOf(file);
-  if (index !== -1) {
-    fileList.value.splice(index, 1);
-    ElMessage.info(`文件 ${file.name} 已移除`);
+// 文件处理函数
+const handleFileChange = (uploadFile, fileListParam) => {
+  if (fileListParam.length > 1) {
+    fileListParam.splice(1); // 只保留第一个
   }
 };
 
-// 清空文件列表
-const clearFiles = () => {
+const handleFileRemove = () => {
   fileList.value = [];
-  ElMessage.info('文件列表已清空');
+};
+
+const clearFile = () => {
+  fileList.value = [];
+};
+
+const clearAll = () => {
+  fileList.value = [];
+  ocrResults.value = [];
+  isProcessing.value = false;
+  processingStatus.value = '';
+  currentPage.value = 0;
+};
+
+// 分页函数
+const previousPage = () => {
+  if (currentPage.value > 0) {
+    currentPage.value--;
+  }
+};
+
+const nextPage = () => {
+  if (currentPage.value < ocrResults.value.length - 1) {
+    currentPage.value++;
+  }
 };
 
 // 格式化文件大小
 const formatFileSize = (size) => {
-  if (size < 1024) {
-    return size + ' B';
-  } else if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(2) + ' KB';
-  } else {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
-  }
+  if (!size) return '0 B';
+  if (size < 1024) return size + ' B';
+  if (size < 1024 * 1024) return (size / 1024).toFixed(2) + ' KB';
+  if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(2) + ' MB';
+  return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 };
 
-// 预览文件
-const showPreview = (file) => {
-  previewFile.value = file;
-  
-  // 为了演示，这里直接创建一个临时URL
-  // 实际应用中，可能需要从服务器获取预览URL
-  if (file.raw) {
-    previewUrl.value = URL.createObjectURL(file.raw);
-    previewDialogVisible.value = true;
-  } else {
-    ElMessage.error('无法预览文件');
-  }
+// 文件转Base64
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = err => reject(err);
+  });
 };
 
-// 判断文件类型
-const isImageFile = (file) => {
-  return file.raw && (file.raw.type === 'image/jpeg' || file.raw.type === 'image/png');
-};
-
-const isPdfFile = (file) => {
-  return file.raw && file.raw.type === 'application/pdf';
-};
-
-// 处理文件
-const processFiles = () => {
+// OCR识别函数
+const startOCR = async () => {
   if (fileList.value.length === 0) {
     ElMessage.warning('请先上传文件');
     return;
   }
-  
+
   isProcessing.value = true;
-  processingProgress.value = 0;
-  processingStatus.value = '正在准备识别...';
-  
-  // 模拟OCR处理过程
-  const totalFiles = fileList.value.length;
-  let processedFiles = 0;
-  
-  const processInterval = setInterval(() => {
-    processingProgress.value += Math.floor(100 / (totalFiles * 5));
-    
-    if (processingProgress.value >= 100) {
-      processingProgress.value = 100;
-      clearInterval(processInterval);
-      
-      // 模拟OCR结果
-      setTimeout(() => {
-        isProcessing.value = false;
-        
-        // 根据模式生成不同的结果
-        if (ocrSettings.value.mode === 'text') {
-          ocrResult.value = {
-            text: '这是识别出的文本内容示例。\n\n北京是中国的首都，位于华北平原北部，是一座有着3000多年历史的古都。\n\n深度学习是机器学习的一个分支，它使用多层神经网络来模拟人脑的学习过程。与传统机器学习相比，深度学习能够自动从大量数据中学习特征，无需手动特征工程。\n\n人工智能（AI）技术的快速发展正在改变各行各业，从医疗保健到金融，从教育到交通。',
-            imageUrl: fileList.value[0].raw ? URL.createObjectURL(fileList.value[0].raw) : null
-          };
-        } else if (ocrSettings.value.mode === 'table') {
-          ocrResult.value = {
-            text: '表格数据已转换为可编辑格式',
-            imageUrl: fileList.value[0].raw ? URL.createObjectURL(fileList.value[0].raw) : null,
-            tableData: [
-              { col1: '项目1', col2: '数据1', col3: '100', col4: '备注1' },
-              { col1: '项目2', col2: '数据2', col3: '200', col4: '备注2' },
-              { col1: '项目3', col2: '数据3', col3: '300', col4: '备注3' },
-              { col1: '项目4', col2: '数据4', col3: '400', col4: '备注4' }
-            ],
-            tableColumns: [
-              { prop: 'col1', label: '第一列' },
-              { prop: 'col2', label: '第二列' },
-              { prop: 'col3', label: '第三列' },
-              { prop: 'col4', label: '第四列' }
-            ]
-          };
-        } else if (ocrSettings.value.mode === 'layout') {
-          ocrResult.value = {
-            text: '# 文档标题\n\n## 第一章\n\n这是第一章的内容，包含了一些段落和列表：\n\n* 项目1\n* 项目2\n* 项目3\n\n## 第二章\n\n这是第二章的内容，包含了一些数字和引用：\n\n1. 第一点\n2. 第二点\n3. 第三点\n\n> 这是一段引用文字，用于展示版面分析的效果。',
-            imageUrl: fileList.value[0].raw ? URL.createObjectURL(fileList.value[0].raw) : null
-          };
-        }
-        
-        activeResultTab.value = 'text';
-        ElMessage.success('文件识别完成');
-      }, 500);
-    } else {
-      processedFiles = Math.floor(processingProgress.value * totalFiles / 100);
-      processingStatus.value = `正在处理第 ${processedFiles + 1}/${totalFiles} 个文件...`;
-    }
-  }, 300);
-};
+  processingStatus.value = '正在准备文件...';
+  ocrResults.value = [];
 
-// 复制文本
-const copyText = () => {
-  if (!ocrResult.value || !ocrResult.value.text) {
-    ElMessage.warning('没有可复制的文本');
-    return;
-  }
-  
-  navigator.clipboard.writeText(ocrResult.value.text)
-    .then(() => {
-      ElMessage.success('文本已复制到剪贴板');
-    })
-    .catch(() => {
-      ElMessage.error('复制失败，请手动复制');
+  try {
+    const file = fileList.value[0].raw;
+    processingStatus.value = '正在转换文件格式...';
+
+    const base64 = await fileToBase64(file);
+
+    const payload = {
+      file: base64,
+      fileType: file.type === 'application/pdf' ? 0 : 1,
+      visualize: ocrSettings.value.visualize
+    };
+
+    processingStatus.value = '正在发送请求...';
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
-};
 
-// 下载文本
-const downloadText = (format) => {
-  if (!ocrResult.value || !ocrResult.value.text) {
-    ElMessage.warning('没有可下载的文本');
-    return;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    processingStatus.value = '正在解析结果...';
+    const result = await response.json();
+
+    // 打印完整的响应数据用于调试
+    console.log('服务器返回的完整数据:', JSON.stringify(result, null, 2));
+
+    // 处理OCR结果 - 根据实际的响应结构调整
+    let processedResults = [];
+
+    // 检查不同可能的数据结构
+    if (result && result.result && result.result.ocrResults) {
+      // 如果数据在 result.result.ocrResults 中
+      const ocrData = result.result.ocrResults;
+      console.log('找到 result.result.ocrResults:', ocrData);
+
+      // 检查是否是数组
+      const resultsArray = Array.isArray(ocrData) ? ocrData : Object.values(ocrData);
+
+      for (let i = 0; i < resultsArray.length; i++) {
+        const pageResult = resultsArray[i];
+        console.log(`处理第 ${i + 1} 页数据:`, pageResult);
+
+        const pageData = {
+          pageNumber: i + 1,
+          text: '',
+          wordCount: 0,
+          confidence: 0,
+          images: {
+            input: pageResult.inputImage || null,
+            ocr: pageResult.ocrImage || null,
+            preprocessing: pageResult.docPreprocessingImage || null
+          }
+        };
+
+        // 从prunedResult中提取文本内容
+        if (pageResult.prunedResult && pageResult.prunedResult.rec_texts) {
+          const texts = pageResult.prunedResult.rec_texts.filter(text => text && text.trim());
+          pageData.text = texts.join('\n');
+          pageData.wordCount = texts.length;
+
+          // 计算平均置信度
+          if (pageResult.prunedResult.rec_scores && pageResult.prunedResult.rec_scores.length > 0) {
+            const totalConfidence = pageResult.prunedResult.rec_scores.reduce((sum, score) => sum + score, 0);
+            pageData.confidence = totalConfidence / pageResult.prunedResult.rec_scores.length;
+          }
+        }
+
+        processedResults.push(pageData);
+      }
+    } else if (result && result.ocrResults) {
+      // 如果数据直接在 result.ocrResults 中
+      const ocrData = result.ocrResults;
+      console.log('找到 result.ocrResults:', ocrData);
+
+      const resultsArray = Array.isArray(ocrData) ? ocrData : Object.values(ocrData);
+
+      for (let i = 0; i < resultsArray.length; i++) {
+        const pageResult = resultsArray[i];
+
+        const pageData = {
+          pageNumber: i + 1,
+          text: '',
+          wordCount: 0,
+          confidence: 0,
+          images: {
+            input: pageResult.inputImage || null,
+            ocr: pageResult.ocrImage || null,
+            preprocessing: pageResult.docPreprocessingImage || null
+          }
+        };
+
+        if (pageResult.prunedResult && pageResult.prunedResult.rec_texts) {
+          const texts = pageResult.prunedResult.rec_texts.filter(text => text && text.trim());
+          pageData.text = texts.join('\n');
+          pageData.wordCount = texts.length;
+
+          if (pageResult.prunedResult.rec_scores && pageResult.prunedResult.rec_scores.length > 0) {
+            const totalConfidence = pageResult.prunedResult.rec_scores.reduce((sum, score) => sum + score, 0);
+            pageData.confidence = totalConfidence / pageResult.prunedResult.rec_scores.length;
+          }
+        }
+
+        processedResults.push(pageData);
+      }
+    } else {
+      // 如果找不到预期的数据结构，显示详细错误信息
+      console.error('无法找到OCR结果数据，响应结构:', Object.keys(result));
+      throw new Error(`服务器返回的数据格式不正确。响应包含的字段: ${Object.keys(result).join(', ')}`);
+    }
+
+    if (processedResults.length > 0) {
+      ocrResults.value = processedResults;
+      currentPage.value = 0; // 重置到第一页
+      ElMessage.success(`识别完成！共识别 ${processedResults.length} 页内容`);
+    } else {
+      throw new Error('未能从响应中提取到任何OCR结果');
+    }
+
+  } catch (error) {
+    console.error('OCR识别失败:', error);
+    ElMessage.error('OCR识别失败: ' + error.message);
+  } finally {
+    isProcessing.value = false;
+    processingStatus.value = '';
   }
-  
-  const text = ocrResult.value.text;
-  const blob = new Blob([text], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `ocr-result.${format}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  
-  ElMessage.success(`文本已下载为${format.toUpperCase()}格式`);
 };
 
-// 导出其他格式
-const handleExport = (command) => {
-  ElMessage.success(`文本已导出为${command.toUpperCase()}格式`);
-  // 实际导出逻辑将连接到后端API
+// 复制文字功能
+const copyPageText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text || '');
+    ElMessage.success('文字已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error('复制失败，请手动复制');
+  }
+};
+
+const copyAllText = async () => {
+  try {
+    const allText = ocrResults.value.map((result, index) => {
+      return `=== 第 ${index + 1} 页 ===\n${result.text || ''}`;
+    }).join('\n\n');
+
+    await navigator.clipboard.writeText(allText);
+    ElMessage.success('全部文字已复制到剪贴板');
+  } catch (error) {
+    ElMessage.error('复制失败，请手动复制');
+  }
+};
+
+// 查看全尺寸图像
+const viewFullImage = (imageData, title) => {
+  currentViewImage.value = imageData;
+  imageViewTitle.value = title;
+  imageViewDialogVisible.value = true;
+};
+
+// 下载图像
+const downloadImage = () => {
+  if (currentViewImage.value) {
+    const link = document.createElement('a');
+    link.href = 'data:image/jpeg;base64,' + currentViewImage.value;
+    link.download = `${imageViewTitle.value}.jpg`;
+    link.click();
+  }
+};
+
+// 下载结果
+const downloadResults = () => {
+  const allText = ocrResults.value.map((result, index) => {
+    return `=== 第 ${index + 1} 页 ===\n${result.text || ''}`;
+  }).join('\n\n');
+
+  const blob = new Blob([allText], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `OCR识别结果_${new Date().toISOString().slice(0, 10)}.txt`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+
+  ElMessage.success('结果已下载');
 };
 </script>
 
 <style scoped>
 .ocr-recognition-view {
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+/* 上传区域样式 */
+.upload-section {
+  padding: 40px 20px;
+  background: #ffffff;
+}
+
+.upload-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
 }
 
-.main-title {
-  font-size: 2rem;
-  font-weight: bold;
-  margin-bottom: 8px;
-  color: #333;
+.upload-header {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #333333;
 }
 
-.subtitle {
-  font-size: 1rem;
-  color: #666;
-  margin-bottom: 30px;
+.upload-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.ocr-container {
-  display: flex;
-  gap: 20px;
+.upload-header p {
+  font-size: 1.1rem;
+  opacity: 0.9;
+  margin: 0;
 }
 
-.upload-panel {
-  flex: 0 0 40%;
-}
-
-.result-panel {
-  flex: 0 0 60%;
+.upload-content {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
 .upload-area {
-  margin-bottom: 20px;
+  margin-bottom: 30px;
 }
 
-.file-list {
-  margin: 20px 0;
+.upload-dragger {
+  width: 100%;
+}
+
+.upload-dragger :deep(.el-upload-dragger) {
+  width: 100%;
+  height: 200px;
+  border: 2px dashed #d9d9d9;
+  border-radius: 16px;
+  background: #fafafa;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-dragger :deep(.el-upload-dragger:hover) {
+  border-color: #409eff;
+  background: #f0f9ff;
+}
+
+.upload-inner {
+  text-align: center;
+}
+
+.upload-icon {
+  font-size: 4rem;
+  color: #409eff;
+  margin-bottom: 16px;
+}
+
+.upload-text h3 {
+  font-size: 1.2rem;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.upload-text p {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* 文件信息卡片 */
+.file-info {
+  margin-top: 20px;
+}
+
+.file-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-basic-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.file-type-icon {
+  font-size: 2rem;
+  color: #409eff;
+}
+
+.file-details h4 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.file-details p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+/* 控制区域 */
+.control-area {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 30px;
+  align-items: end;
+}
+
+.settings-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.settings-card h4 {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setting-item label {
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .action-buttons {
   display: flex;
-  gap: 10px;
-  margin: 20px 0;
+  gap: 16px;
 }
 
-.ocr-settings {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f9f9f9;
-  border-radius: 8px;
+.primary-action {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
 }
 
-.result-header {
+.secondary-action {
+  border-radius: 12px;
+  padding: 12px 24px;
+}
+
+/* 结果区域样式 */
+.results-section {
+  background: #f8fafc;
+  min-height: 60vh;
+  padding: 40px 20px;
+}
+
+.results-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.results-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 30px;
 }
 
-.result-actions {
+.results-header h2 {
+  color: #333;
+  font-size: 1.8rem;
+  margin: 0;
+}
+
+.results-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
-.processing-indicator {
+/* 处理中状态 */
+.processing-card {
+  background: white;
+  border-radius: 16px;
+  padding: 60px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.processing-animation {
+  margin-bottom: 24px;
+}
+
+.rotating {
+  font-size: 3rem;
+  color: #409eff;
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.processing-content h3 {
+  color: #333;
+  margin: 0 0 12px 0;
+  font-size: 1.4rem;
+}
+
+.processing-content p {
+  color: #666;
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* 结果内容 */
+.results-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
+  gap: 30px;
 }
 
-.processing-indicator p {
-  margin-top: 20px;
-  color: #666;
-}
-
-.empty-result {
+/* 分页结果样式 */
+.pagination-results {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-}
-
-.empty-result p {
-  margin-top: 20px;
-  color: #666;
-}
-
-.result-content {
-  border: 1px solid #eee;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.text-result {
-  padding: 15px;
-}
-
-.compare-result {
-  display: flex;
   gap: 20px;
 }
 
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 12px;
+  padding: 20px 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.page-info {
+  font-size: 1rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.page-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.page-buttons .el-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.current-page-result {
+  width: 100%;
+}
+
+.result-item {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.result-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.result-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.result-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.result-content {
+  padding: 30px;
+}
+
+/* 图像展示区域 */
+.images-area {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.image-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.image-header {
+  background: #f9fafb;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.image-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #374151;
+}
+
 .image-container {
-  flex: 1;
-  max-height: 500px;
-  overflow: auto;
-  border: 1px solid #eee;
+  padding: 16px;
+  text-align: center;
 }
 
 .image-container img {
-  width: 100%;
-  height: auto;
-}
-
-.text-container {
-  flex: 1;
-}
-
-.table-result {
-  padding: 15px;
-}
-
-.file-preview {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 200px;
-}
-
-.file-preview img {
   max-width: 100%;
-  max-height: 500px;
+  height: auto;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
 }
 
-.preview-not-available {
-  text-align: center;
+.image-container img:hover {
+  transform: scale(1.02);
 }
-</style> 
+
+/* 文字内容区域 */
+.text-area {
+  margin-top: 20px;
+}
+
+.text-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.text-header {
+  background: #f9fafb;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.text-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #374151;
+}
+
+.text-content {
+  padding: 20px;
+  background: white;
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+  color: #374151;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 120px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* 图像查看对话框 */
+.image-view-dialog :deep(.el-dialog__body) {
+  padding: 0;
+}
+
+.image-view-content {
+  text-align: center;
+  background: #f5f5f5;
+  padding: 20px;
+}
+
+.full-image {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .upload-header h1 {
+    font-size: 2rem;
+  }
+
+  .upload-content {
+    padding: 20px;
+  }
+
+  .control-area {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .action-buttons {
+    justify-content: center;
+  }
+
+  .results-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .results-actions {
+    justify-content: center;
+  }
+
+  .images-area {
+    grid-template-columns: 1fr;
+  }
+
+  .result-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .result-stats {
+    justify-content: center;
+  }
+}
+</style>

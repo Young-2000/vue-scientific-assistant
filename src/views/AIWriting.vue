@@ -122,7 +122,7 @@ const rules = {
 };
 
 // 新增：AI写作类型，默认为润色
-const aiType = ref('runse'); // 'runse' 润色, 'xuxie' 续写
+const aiType = ref('xuxie'); // 'runse' 润色, 'xuxie' 续写
 
 // 知识库相关
 const knowledgeBases = ref([]);
@@ -606,14 +606,17 @@ const generateContent = () => {
 }
 .kb-radio-group {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .kb-radio-item {
   padding: 8px 15px;
   border-radius: 6px;
   border: 1px solid #dcdfe6;
   transition: all 0.3s;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
 }
 .kb-radio-item:hover {
   background-color: #ecf5ff;
@@ -621,9 +624,10 @@ const generateContent = () => {
   color: #409eff;
 }
 .kb-radio-item.is-checked {
-  background-color: #409eff;
+  background-color: #ffffff;
   border-color: #409eff;
-  color: #fff;
+  color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
 }
 @media (max-width: 1200px) {
   .ai-writing-view {
